@@ -15,16 +15,21 @@ enum ProviderError: Error {
 /// It only decides "capture or not" and copies bytes. It never reads or
 /// changes what is inside a connection.
 class TransparentProxyProvider: NETransparentProxyProvider {
-    private var address: CaptureAddress?
+    private var target: CaptureTarget?
     private var control: NWConnection?
     private let specLock = NSLock()
     private var spec = InterceptSpec(parsing: [])  // empty: capture nothing
 
-    /// A TCP connection to Hotline's intercept port.
-    private static func connection(to address: CaptureAddress) -> NWConnection {
-        NWConnection(
-            host: NWEndpoint.Host(address.host), port: NWEndpoint.Port(rawValue: address.port)!,
-            using: .tcp)
+    /// A connection to Hotline: TCP to its intercept port, or to a socket file.
+    private static func connection(to target: CaptureTarget) -> NWConnection {
+        switch target {
+        case .tcp(let address):
+            return NWConnection(
+                host: NWEndpoint.Host(address.host), port: NWEndpoint.Port(rawValue: address.port)!,
+                using: .tcp)
+        case .unix(let path):
+            return NWConnection(to: .unix(path: path), using: .tcp)
+        }
     }
 
     // MARK: Start and stop
@@ -34,16 +39,16 @@ class TransparentProxyProvider: NETransparentProxyProvider {
             throw ProviderError.addressMissing
         }
         // The app already checked this; check again, since the setting could have been changed.
-        let address: CaptureAddress
+        let target: CaptureTarget
         do {
-            address = try CaptureAddress(parsing: text)
+            target = try CaptureTarget(parsing: text)
         } catch {
             throw ProviderError.addressRefused(text)
         }
-        self.address = address
+        self.target = target
 
         // 1. Open the control connection and say hello. Hotline answers with the app list.
-        let control = Self.connection(to: address)
+        let control = Self.connection(to: target)
         self.control = control
         try await control.establish()
         try await control.sendBytes(Framing.encode(ClientHello.control()))
@@ -117,11 +122,11 @@ class TransparentProxyProvider: NETransparentProxyProvider {
             transport: .tcp, host: remote.hostname, port: port, pid: process.pid,
             processName: process.path)
 
-        guard let address = address else { return false }
+        guard let target = target else { return false }
         Task {
             do {
                 try await tcp.open(withLocalEndpoint: nil)
-                let connection = Self.connection(to: address)
+                let connection = Self.connection(to: target)
                 try await connection.establish()
                 try await connection.sendBytes(Framing.encode(hello))
                 Copier.run(flow: tcp, connection: connection)

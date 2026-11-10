@@ -6,6 +6,8 @@ This is the contract between this app and the Hotline proxy (Go, in `petercipov/
 
 The extension connects over TCP to Hotline's `listen.intercept` port. Hotline passes the address as `host:port` to the helper app as its only argument, and the helper stores it in the proxy setting, so the extension gets it from macOS. The address must be a loopback address (`127.x.x.x`, `::1` in brackets, or `localhost`), so only this Mac can reach it; the helper app and the extension both refuse anything else. Hotline refuses to start when asked to capture on an address that is not loopback, and does not check who connects.
 
+For testing with a stand-in listener, the argument may instead be the absolute path of a socket file (a local file-like channel). Then the helper app and the extension require its folder to be owned by the user with mode 0700, and refuse otherwise. The Go proxy does not listen on a socket file.
+
 The extension never hands over connections to loopback addresses, so its own connection to Hotline is never captured. This also means a captured app's calls to services on this Mac are not captured.
 
 The same port also takes TLS connections from apps (the intercept ingress). The first byte tells them apart: a TLS handshake starts with 0x16, and the messages below start with the size of the body, so with 0x00. Hotline takes these messages only when it was asked to capture apps; otherwise they are refused like any bytes that are not TLS.

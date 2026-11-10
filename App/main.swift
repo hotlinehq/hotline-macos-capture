@@ -52,7 +52,7 @@ final class Installer: NSObject, OSSystemExtensionRequestDelegate {
 }
 
 /// Saves the proxy setting, with Hotline's address inside it, and switches it on.
-func startProxy(address: CaptureAddress) async throws {
+func startProxy(target: CaptureTarget) async throws {
     let managers = try await NETransparentProxyManager.loadAllFromPreferences()
     let manager = managers.first(where: {
         ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == extensionIdentifier
@@ -60,7 +60,7 @@ func startProxy(address: CaptureAddress) async throws {
 
     let provider = NETunnelProviderProtocol()
     provider.providerBundleIdentifier = extensionIdentifier
-    provider.serverAddress = address.text
+    provider.serverAddress = target.text
     manager.protocolConfiguration = provider
     manager.localizedDescription = "Hotline Capture"
     manager.isEnabled = true
@@ -70,23 +70,26 @@ func startProxy(address: CaptureAddress) async throws {
     try manager.connection.startVPNTunnel()
 }
 
-// The only argument is the address of Hotline's intercept port, such as 127.0.0.1:8444.
+// The only argument is where Hotline listens: the address of its intercept port, such as
+// 127.0.0.1:8444, or a socket file (an absolute path) for testing.
 guard CommandLine.arguments.count == 2 else {
     fail("This helper is started by Hotline and cannot be run on its own.")
 }
-let address: CaptureAddress
+let target: CaptureTarget
 do {
-    address = try CaptureAddress(parsing: CommandLine.arguments[1])
+    target = try CaptureTarget(parsing: CommandLine.arguments[1])
 } catch CaptureAddress.ParseError.notLoopback {
     fail("The address must be on this Mac only, such as 127.0.0.1:8444.")
+} catch is CaptureTarget.SocketFolderError {
+    fail("The folder of the socket file must exist, be owned by you and be closed to other users (mode 0700).")
 } catch {
-    fail("The argument must be an address and a port, such as 127.0.0.1:8444.")
+    fail("The argument must be an address and a port, such as 127.0.0.1:8444, or the path of a socket file.")
 }
 
 Task {
     do {
         try await Installer.run()
-        try await startProxy(address: address)
+        try await startProxy(target: target)
         exit(0)
     } catch {
         fail("could not start capture: \(error.localizedDescription)")
