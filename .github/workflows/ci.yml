@@ -13,8 +13,8 @@ permissions:
 
 jobs:
   test-and-build:
-    # A standard hosted Apple Silicon runner: free on public repositories.
-    runs-on: macos-latest
+    # A standard hosted Apple Silicon runner (macos-15): free on public repositories.
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
