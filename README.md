@@ -4,7 +4,7 @@ Sends the secure calls of chosen apps on a Mac to a local [Hotline](https://gith
 
 Apple Silicon only, macOS 13 or newer.
 
-**Status: first draft, never built.** It was written without a Mac. Nothing here has been compiled or run yet. See `CLAUDE.md` for the rules and `docs/protocol.md` for the contract with Hotline.
+**Status: first draft.** It was written without a Mac. The pull request check (unit tests, 90 percent coverage of `CaptureCore`, and an unsigned build of the app and the extension) has passed on a GitHub macOS runner. Nothing has been run on a real Mac yet: the extension has never been installed, approved or given a connection. See `CLAUDE.md` for the rules and `docs/protocol.md` for the contract with Hotline.
 
 ## Layout
 

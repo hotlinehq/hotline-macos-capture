@@ -53,4 +53,4 @@ Test names say the behaviour in plain words (`testOversizedAnnouncementIsRefused
 
 ## Not verified yet
 
-The Swift code was written without a Mac to compile on. Treat the first build on a Mac as the first real test, and fix what it finds before trusting any of it.
+The code compiles and the unit tests pass in CI (a GitHub macOS runner), but the extension has never been installed or run on a real Mac. Treat the first run there, with the checklist in `README.md`, as the first real test of the extension and the helper app.
