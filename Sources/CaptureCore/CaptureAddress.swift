@@ -1,9 +1,9 @@
 import Foundation
 
-/// The address of Hotline's intercept port, which the extension connects to.
-/// Hotline passes it as "host:port". It must be a loopback address, so only
-/// this Mac can reach the port: otherwise another machine could claim to be a
-/// program (requirement 14).
+/// The address of Hotline's proxy port, which the extension connects to.
+/// Hotline passes it as "host:port". It must be a loopback address: the
+/// captured calls never leave this Mac, and Hotline believes the capture
+/// headers only from this Mac.
 public struct CaptureAddress: Equatable {
     public enum ParseError: Error, Equatable {
         case notHostAndPort

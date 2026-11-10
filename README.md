@@ -1,6 +1,6 @@
 # hotline-macos-capture
 
-Sends the secure calls of chosen apps on a Mac to a local [Hotline](https://github.com/petercipov/hotline) proxy. A small Swift app installs a macOS system extension (a program macOS runs for the Mac's network traffic). The extension finds which program made each connection and, if the program is on the app list, hands the connection to Hotline's `listen.intercept` port on this Mac.
+Sends the secure calls of chosen apps on a Mac to a local [Hotline](https://github.com/petercipov/hotline) proxy. A small Swift app installs a macOS system extension (a program macOS runs for the Mac's network traffic). The extension finds which program made each connection and, if the program is on the app list, hands the connection to Hotline's proxy port on this Mac as a standard HTTP CONNECT.
 
 Apple Silicon only, macOS 13 or newer.
 
@@ -8,23 +8,26 @@ Apple Silicon only, macOS 13 or newer.
 
 Hotline (a Go proxy, in [petercipov/hotline](https://github.com/petercipov/hotline)) never starts your apps. You start them as usual, and Hotline picks up the secure calls of the ones you named:
 
-1. Hotline listens on its `listen.intercept` port, on a loopback address, and is told which apps to capture (the `--capture` flag, still to come in Hotline).
-2. Hotline starts the helper app with the address of that port, such as `127.0.0.1:8444`. The helper app installs the system extension and switches it on. The first time, macOS asks you to approve it in System Settings.
-3. The extension connects to Hotline as the `control` connection and receives the app list. For each new connection of a listed app it opens a `flow` connection to Hotline, says where the app really called and which program it was, then copies the bytes both ways. Other apps are left alone.
+1. Hotline is told which apps to capture (the `--capture` flag, still to come in Hotline).
+2. Hotline starts the helper app with its proxy address and that list, such as `127.0.0.1:8080 curl firefox`. The helper app installs the system extension, saves the list in the macOS proxy setting and switches capture on. The first time, macOS asks you to approve the extension in System Settings.
+3. For each new connection of a listed app, the extension sends Hotline a CONNECT to where the app really called, with the program in two headers, then copies the bytes both ways. Other apps are left alone.
+4. Every 2 seconds the extension checks that Hotline still answers. If it does not, apps go out as usual.
+5. When Hotline stops, it runs the helper app with `--stop`. The extension stays installed.
 
-The helper app and the extension refuse an address that is not on this Mac. The exact messages are in `docs/protocol.md`.
+The helper app and the extension refuse an address that is not on this Mac. The exact requests are in `docs/protocol.md`.
 
 ## Status
 
 - The code builds and its unit tests pass on a GitHub macOS runner (90 percent coverage of `CaptureCore`), and releases are signed, notarized and published from a version tag. See `docs/release-setup.md`.
 - The signed app of release v0.1.0 has been checked on a Mac: the checksum matches, the signature is valid, and macOS accepts it as notarized.
-- The extension has not yet been installed, approved or given a connection on a real Mac, and Hotline's `--capture` flag does not exist yet. The Hotline side that takes the connections is `listen.intercept` with `Options.CaptureApps`.
+- Release v0.1.1 ran on a real Mac with the earlier message format: the extension was approved, picked out `curl` and handed its connections over. The CONNECT version has not run on a Mac yet.
+- Hotline's `--capture` flag and its handling of the capture headers do not exist yet.
 
 See `CLAUDE.md` for the working rules.
 
 ## Layout
 
-- `Sources/CaptureCore`: the app list, the messages to Hotline and the address check. All logic, fully unit tested.
+- `Sources/CaptureCore`: the app list, the CONNECT request and reply, the helper's arguments and the address check. All logic, fully unit tested.
 - `Extension/`: the system extension (thin layer over macOS).
 - `App/`: the helper app that installs the extension (thin layer).
 - `project.yml`: Xcode project description for XcodeGen.
@@ -56,27 +59,28 @@ Set your Apple team id in `project.yml` (or pass `DEVELOPMENT_TEAM`). Signing an
 
 ## Try it by hand (on a Mac)
 
-`scripts/try-capture.py` stands in for Hotline: it answers the extension's control connection with an app list and prints each captured connection. It needs only the Python 3 that macOS brings with its developer tools.
+`scripts/try-capture.py` stands in for Hotline: it answers the extension's CONNECT requests and prints each captured connection. It needs only the Python 3 that macOS brings with its developer tools.
 
 1. Download `HotlineCapture.app.tar` and its `.sha256` file from the [latest release](https://github.com/petercipov/hotline-macos-capture/releases/latest), check them with `shasum -a 256 -c HotlineCapture.app.tar.sha256`, and unpack the tar in `/Applications` (macOS installs system extensions only from there).
-2. In one terminal, start the stand-in: `python3 scripts/try-capture.py --apps curl`. It listens on `127.0.0.1:8444`; `--listen sock:///tmp/capture/capture.sock` uses a socket file instead, in a folder you own with mode 0700.
-3. In a second terminal, start the helper app with the same address: `"/Applications/Hotline Capture.app/Contents/MacOS/Hotline Capture" 127.0.0.1:8444`. The first time, macOS asks you to approve the extension in System Settings, Privacy and Security. Approve it and the helper app finishes.
-4. The stand-in prints `control connection from the extension` and the app list it sent.
-5. In a third terminal run `curl https://example.com`. The stand-in prints `captured: example.com:443 from process ... /usr/bin/curl` and that the first byte is `0x16`. The curl call itself then fails, because the stand-in does not answer. Other programs keep working.
-6. Stop the stand-in with Ctrl-C. The extension stops capturing.
+2. In one terminal, start the stand-in: `python3 scripts/try-capture.py`. It listens on `127.0.0.1:8080`.
+3. In a second terminal, start capture of `curl`: `"/Applications/Hotline Capture.app/Contents/MacOS/Hotline Capture" 127.0.0.1:8080 curl`. The first time, macOS asks you to approve the extension in System Settings, Privacy and Security. The helper app finishes once capture is on, or says why not.
+4. Run `curl https://example.com`. The stand-in prints `captured: ...:443 from process ... /usr/bin/curl` and that the first byte is `0x16`. The curl call itself then fails, because the stand-in does not answer. Other programs keep working.
+5. Stop the stand-in with Ctrl-C and run `curl` again within a few seconds: it works, because the extension sees that Hotline is gone.
+6. Switch capture off: `"/Applications/Hotline Capture.app/Contents/MacOS/Hotline Capture" --stop`.
 
 ## Checklist for the first real run on a Mac
 
 1. `swift test` passes and coverage of `CaptureCore` is at least 90 percent.
-2. `xcodegen` makes a project and it builds. Fix project settings that Apple's tools reject.
-3. The app refuses to start without an address, and with an address that is not on this Mac (for example `0.0.0.0:8444`).
-4. With a test listener, either a loopback port (`127.0.0.1:8444`) or a socket file (`sock:///tmp/capture/capture.sock`, in a folder you own with mode 0700): macOS asks for approval once, the extension connects as `control`, and it receives the app list the listener sends.
-5. A chosen app (for example `curl`) shows up as a `flow` connection with the right destination and program. Another app does not.
-6. Stopping leaves the extension installed. Starting again asks for no second approval.
+2. The helper refuses no arguments, an address without apps, and an address that is not on this Mac (for example `0.0.0.0:8080`).
+3. Without the stand-in running, starting capture fails with a message naming the address, and nothing is captured.
+4. With the stand-in: `curl` shows up with the right destination, process number and program. Another app does not.
+5. Starting again with another list (for example `firefox`) captures the new app and no longer `curl`, with no second approval.
+6. With the stand-in stopped, `curl` works again within 2 seconds.
+7. `--stop` switches capture off and leaves the extension installed.
 
 ## Thanks
 
-The design (system extension, control connection plus one connection per captured connection, app list with skip rules) follows [mitmproxy_rs](https://github.com/mitmproxy/mitmproxy_rs), MIT licensed. The code here is written fresh.
+The design (system extension, one connection to the proxy per captured connection, app list with skip rules) follows [mitmproxy_rs](https://github.com/mitmproxy/mitmproxy_rs), MIT licensed. The code here is written fresh.
 
 ## Licence
 

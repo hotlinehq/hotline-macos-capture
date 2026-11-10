@@ -51,16 +51,35 @@ final class Installer: NSObject, OSSystemExtensionRequestDelegate {
     }
 }
 
-/// Saves the proxy setting, with Hotline's address inside it, and switches it on.
-func startProxy(target: CaptureTarget) async throws {
+/// The saved proxy setting of this app, if there is one.
+func loadManager() async throws -> NETransparentProxyManager? {
     let managers = try await NETransparentProxyManager.loadAllFromPreferences()
-    let manager = managers.first(where: {
+    return managers.first(where: {
         ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == extensionIdentifier
-    }) ?? NETransparentProxyManager()
+    })
+}
+
+/// Switches capture off and waits, up to 5 seconds, until macOS says it is off.
+func stopCapture(_ manager: NETransparentProxyManager) async {
+    let status = manager.connection.status
+    guard status != .disconnected, status != .invalid else { return }
+    manager.connection.stopVPNTunnel()
+    for _ in 0..<50 where manager.connection.status != .disconnected {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+}
+
+/// Saves the proxy setting, with Hotline's address and this run's app list
+/// inside it, and switches capture on. Capture that is already on is
+/// switched off first, so the extension reads the new list.
+func startCapture(address: CaptureAddress, apps: [String]) async throws {
+    let manager = try await loadManager() ?? NETransparentProxyManager()
+    await stopCapture(manager)
 
     let provider = NETunnelProviderProtocol()
     provider.providerBundleIdentifier = extensionIdentifier
-    provider.serverAddress = target.text
+    provider.serverAddress = address.text
+    provider.providerConfiguration = HelperCommand.setting(apps: apps)
     manager.protocolConfiguration = provider
     manager.localizedDescription = "Hotline Capture"
     manager.isEnabled = true
@@ -68,33 +87,68 @@ func startProxy(target: CaptureTarget) async throws {
     try await manager.saveToPreferences()
     try await manager.loadFromPreferences()
     try manager.connection.startVPNTunnel()
+
+    // The extension first checks that Hotline answers, and stops if not. Wait up to
+    // 10 seconds to see which way it went, so Hotline can say why capture did not start.
+    // The status may still read "disconnected" for a moment after the start, so a
+    // "disconnected" counts as a failure only after the first second.
+    for step in 0..<100 {
+        let status = manager.connection.status
+        if status == .connected || (status == .disconnected && step >= 10) {
+            break
+        }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+    guard manager.connection.status == .connected else {
+        throw CaptureError.notStarted(address.text)
+    }
 }
 
-// The only argument is where Hotline listens: the address of its intercept port, such as
-// 127.0.0.1:8444, or a socket file for testing, as sock:// and an absolute path.
-guard CommandLine.arguments.count == 2 else {
-    fail("This helper is started by Hotline and cannot be run on its own.")
+enum CaptureError: LocalizedError {
+    case notStarted(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notStarted(let address):
+            return "the extension did not start. Is Hotline listening on \(address)? "
+                + "Details: log show --last 1m --predicate 'subsystem == \"io.github.petercipov.hotlinecapture\"'"
+        }
+    }
 }
-let target: CaptureTarget
+
+/// Switches capture off and leaves the setting switched off. The extension stays installed.
+func stopCapture() async throws {
+    guard let manager = try await loadManager() else { return }
+    await stopCapture(manager)
+    manager.isEnabled = false
+    try await manager.saveToPreferences()
+}
+
+// Hotline starts this helper with its proxy address and the apps to capture, such as
+// 127.0.0.1:8080 curl firefox, and with --stop when it stops.
+let command: HelperCommand
 do {
-    target = try CaptureTarget(parsing: CommandLine.arguments[1])
+    command = try HelperCommand(arguments: Array(CommandLine.arguments.dropFirst()), callerPID: getppid())
 } catch CaptureAddress.ParseError.notLoopback {
-    fail("The address must be on this Mac only, such as 127.0.0.1:8444.")
-} catch CaptureTarget.ParseError.pathNotAbsolute {
-    fail("After sock:// the path of the socket file must start with a slash, as in sock:///tmp/capture/capture.sock.")
-} catch is CaptureTarget.SocketFolderError {
-    fail("The folder of the socket file must exist, be owned by you and be closed to other users (mode 0700).")
+    fail("The address must be on this Mac only, such as 127.0.0.1:8080.")
+} catch HelperCommand.UsageError.noApps {
+    fail("Name at least one app to capture after the address, such as 127.0.0.1:8080 curl.")
 } catch {
-    fail("The argument must be an address and a port, such as 127.0.0.1:8444, or sock:// and the path of a socket file.")
+    fail("Give Hotline's address and the apps to capture, such as 127.0.0.1:8080 curl, or --stop.")
 }
 
 Task {
     do {
-        try await Installer.run()
-        try await startProxy(target: target)
+        switch command {
+        case .start(let address, let apps):
+            try await Installer.run()
+            try await startCapture(address: address, apps: apps)
+        case .stop:
+            try await stopCapture()
+        }
         exit(0)
     } catch {
-        fail("could not start capture: \(error.localizedDescription)")
+        fail("could not \(command == .stop ? "stop" : "start") capture: \(error.localizedDescription)")
     }
 }
 RunLoop.main.run()

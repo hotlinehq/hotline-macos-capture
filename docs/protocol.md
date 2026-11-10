@@ -1,49 +1,39 @@
-# Socket protocol (version 1)
+# How the extension talks to Hotline (capture version 1)
 
-This is the contract between this app and the Hotline proxy (Go, in `petercipov/hotline`). Hotline listens; the extension connects. Change this file together with `Sources/CaptureCore/Messages.swift` and raise `captureProtocolVersion`.
+This is the contract between this app and the Hotline proxy (Go, in `petercipov/hotline`). It is plain HTTP: a CONNECT request with three headers of ours. Change this file together with `Sources/CaptureCore/ConnectRequest.swift`, and raise `ConnectRequest.captureVersion` when a header changes.
 
-## The connection
+## Starting and stopping
 
-The extension connects over TCP to Hotline's `listen.intercept` port. Hotline passes the address as `host:port` to the helper app as its only argument, and the helper stores it in the proxy setting, so the extension gets it from macOS. The address must be a loopback address (`127.x.x.x`, `::1` in brackets, or `localhost`), so only this Mac can reach it; the helper app and the extension both refuse anything else. Hotline refuses to start when asked to capture on an address that is not loopback, and does not check who connects.
+Hotline runs the helper app:
 
-For testing with a stand-in listener, the argument may instead be `sock://` and the absolute path of a socket file (a local file-like channel), as in `sock:///tmp/capture/capture.sock`. Then the helper app and the extension require its folder to be owned by the user with mode 0700, and refuse otherwise. The Go proxy does not listen on a socket file.
+- `Hotline Capture <address> <app>...` starts capture, for example `Hotline Capture 127.0.0.1:8080 curl firefox`. `<address>` is Hotline's proxy port (`listen.proxy`), on this Mac. Each app is a piece of a program path or a process number; a leading `!` skips it. When the first entry is a skip rule, everything else is captured. The helper adds a skip rule for its caller, Hotline, so Hotline's own calls are never captured.
+- `Hotline Capture --stop` switches capture off. The extension stays installed.
 
-The extension never hands over connections to loopback addresses, so its own connection to Hotline is never captured. This also means a captured app's calls to services on this Mac are not captured.
+The helper stores the address and the app list in the macOS proxy setting, where the extension reads them when it starts. A new list is a new start: the helper switches capture off and on again, which needs no new approval.
 
-The same port also takes TLS connections from apps (the intercept ingress). The first byte tells them apart: a TLS handshake starts with 0x16, and the messages below start with the size of the body, so with 0x00. Hotline takes these messages only when it was asked to capture apps; otherwise they are refused like any bytes that are not TLS.
+The address must be a loopback address (`127.x.x.x`, `::1` in brackets, or `localhost`). The helper and the extension refuse anything else. The extension never hands over connections to loopback addresses, so its own connections to Hotline are never captured, and a captured app's calls to services on this Mac are not captured either.
 
-## Framing
+## One captured connection
 
-Every message is: 4 bytes with the size of the body (big endian), then the body as JSON (UTF-8). A size over 16384 bytes, or a body that is not valid, closes the connection. A message with another `version` than the one both sides know is refused.
+For each new TCP connection of a listed app, the extension connects to the address and sends:
 
-## Connections
-
-The extension opens two kinds of connection to the same port. Its first message says which.
-
-### Control (one, kept open)
-
-1. Extension sends `ClientHello` with `role: "control"`.
-2. Hotline sends a `SpecUpdate` right away, and again whenever the app list changes.
-
-```json
-{"version":1,"entries":["curl","firefox","!1234"]}
+```
+CONNECT 93.184.215.14:443 HTTP/1.1
+Host: 93.184.215.14:443
+Hotline-Capture: 1
+Hotline-Capture-Pid: 4242
+Hotline-Capture-Program: /usr/bin/curl
 ```
 
-Entries are program names (matched as a piece of the program path) or process numbers. A leading `!` skips the match. When the first entry is a skip rule, everything else is captured; otherwise only matches are. An empty list captures nothing, which stops capture. Hotline's own processes must always appear as skip rules.
+- The target is where the app really called, as macOS reports it (usually an address). IPv6 is written in brackets.
+- `Hotline-Capture` says the connection was captured; its value is the version.
+- `Hotline-Capture-Pid` is the process number of the program.
+- `Hotline-Capture-Program` is the program path, as UTF-8. It is left out when unknown, longer than 4096 bytes, or holding a control character.
 
-If the control connection closes, the extension stops capturing.
+Hotline answers like any HTTP proxy. A `2xx` status line and headers, ended by an empty line, open the tunnel: after it, both sides send the raw bytes of the app's connection, and either side closing ends it. Any other status, a reply that is not HTTP/1.0 or HTTP/1.1, or a reply over 8 KiB closes the app's connection.
 
-### Flow (one per captured connection)
+Hotline believes the capture headers only when the CONNECT comes from a loopback address. A CONNECT from anywhere else is treated as an ordinary one.
 
-1. Extension sends `ClientHello` with `role: "flow"`:
+## Checking that Hotline is there
 
-```json
-{"version":1,"role":"flow","transport":"tcp","host":"api.example.com","port":443,"pid":4242,"processName":"/usr/bin/curl"}
-```
-
-`host` is the real destination, as the app asked for it (a name or an address). `processName` is the program path and may be missing.
-
-2. After that single message, both sides send raw bytes of the connection with no more framing. Bytes that arrive in the same read as the hello, after it, belong to the connection.
-3. Either side closing ends the connection.
-
-Only `transport: "tcp"` is used for now.
+macOS wants the answer "capture or not" at once, when a connection starts. So the extension checks Hotline in the background: every 2 seconds it opens a TCP connection to the address and closes it, sending nothing. While the last check failed, it captures nothing and every app goes out as usual. When it starts, the extension makes the same check and refuses to start if it fails.
