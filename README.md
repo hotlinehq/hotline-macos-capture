@@ -12,7 +12,9 @@ Apple Silicon only, macOS 13 or newer.
 - `Extension/`: the system extension (thin layer over macOS).
 - `App/`: the helper app that installs the extension (thin layer).
 - `project.yml`: Xcode project description for XcodeGen.
-- `scripts/build-release.sh`: build, sign, notarize and pack, on a Mac.
+- `scripts/build-release.sh`: build, sign, notarize and pack (used by the release workflow).
+- `.github/workflows/ci.yml`: tests, coverage check and unsigned build on every pull request.
+- `.github/workflows/release.yml` and `docs/release-setup.md`: signed release on a version tag.
 
 ## Try the tests (on a Mac)
 

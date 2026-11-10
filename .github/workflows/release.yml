@@ -1,0 +1,96 @@
+# Builds, signs, notarizes and publishes Hotline Capture when a version tag is pushed.
+# Only tags start it, never pull requests, because it uses the Apple secrets.
+# The one-time setup of those secrets is in docs/release-setup.md.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # to attach the files to the GitHub release
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that all secrets are set
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE_APP: ${{ secrets.APPLE_PROVISIONING_PROFILE_APP }}
+          APPLE_PROVISIONING_PROFILE_EXT: ${{ secrets.APPLE_PROVISIONING_PROFILE_EXT }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          for name in APPLE_CERTIFICATE_P12 APPLE_CERTIFICATE_PASSWORD \
+            APPLE_PROVISIONING_PROFILE_APP APPLE_PROVISIONING_PROFILE_EXT \
+            APPLE_ID APPLE_APP_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Secret $name is not set. See docs/release-setup.md."
+              exit 1
+            fi
+          done
+
+      - name: Unit tests with coverage
+        run: |
+          swift test --enable-code-coverage
+          scripts/check-coverage.sh 90
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Install the certificate and the provisioning profiles
+        env:
+          APPLE_CERTIFICATE_P12: ${{ secrets.APPLE_CERTIFICATE_P12 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_PROVISIONING_PROFILE_APP: ${{ secrets.APPLE_PROVISIONING_PROFILE_APP }}
+          APPLE_PROVISIONING_PROFILE_EXT: ${{ secrets.APPLE_PROVISIONING_PROFILE_EXT }}
+        run: |
+          # A temporary keychain that is deleted at the end of the job.
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$APPLE_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$KEYCHAIN" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm "$RUNNER_TEMP/certificate.p12"
+
+          PROFILES="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES"
+          echo "$APPLE_PROVISIONING_PROFILE_APP" | base64 --decode > "$PROFILES/app.provisionprofile"
+          echo "$APPLE_PROVISIONING_PROFILE_EXT" | base64 --decode > "$PROFILES/ext.provisionprofile"
+
+      - name: Build, sign and notarize
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          # Tag v1.2.3 gives version 1.2.3. The build number rises with every run,
+          # as the extension needs, or macOS keeps the old one.
+          VERSION="${GITHUB_REF_NAME#v}" BUILD_NUMBER="$GITHUB_RUN_NUMBER" scripts/build-release.sh
+
+      - name: Publish the files on the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/HotlineCapture.app.tar dist/HotlineCapture.app.tar.sha256 \
+            --title "Hotline Capture $GITHUB_REF_NAME" \
+            --notes "Signed and notarized, Apple Silicon only, macOS 13 or newer. Verify the download against the .sha256 file."
+
+      - name: Remove the temporary keychain and profiles
+        if: always()
+        run: |
+          security delete-keychain "$KEYCHAIN" || true
+          rm -rf "$HOME/Library/MobileDevice/Provisioning Profiles"

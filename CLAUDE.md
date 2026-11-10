@@ -47,7 +47,7 @@ Test names say the behaviour in plain words (`testOversizedAnnouncementIsRefused
 
 ## Signing and release
 
-- Signing, notarizing and publishing are done on a macOS machine with `scripts/build-release.sh`. Secrets come from environment variables, never from files in the repository.
+- Releases are built, signed, notarized and published by `.github/workflows/release.yml` on a GitHub macOS runner when a `v*` tag is pushed. `scripts/build-release.sh` does the work and can also run on a Mac. One-time setup is in `docs/release-setup.md`. Secrets come from environment variables and repository secrets, never from files in the repository.
 - Raise the extension version number on every change, or macOS keeps the old one.
 - Release builds are produced on release tags only, never on pull requests from forks.
 
