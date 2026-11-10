@@ -4,7 +4,23 @@ Sends the secure calls of chosen apps on a Mac to a local [Hotline](https://gith
 
 Apple Silicon only, macOS 13 or newer.
 
-**Status: first draft.** It was written without a Mac. The pull request check (unit tests, 90 percent coverage of `CaptureCore`, and an unsigned build of the app and the extension) has passed on a GitHub macOS runner. Nothing has been run on a real Mac yet: the extension has never been installed, approved or given a connection. See `CLAUDE.md` for the rules and `docs/protocol.md` for the contract with Hotline.
+## How it works
+
+Hotline (a Go proxy, in [petercipov/hotline](https://github.com/petercipov/hotline)) never starts your apps. You start them as usual, and Hotline picks up the secure calls of the ones you named:
+
+1. Hotline listens on its `listen.intercept` port, on a loopback address, and is told which apps to capture (the `--capture` flag, still to come in Hotline).
+2. Hotline starts the helper app with the address of that port, such as `127.0.0.1:8444`. The helper app installs the system extension and switches it on. The first time, macOS asks you to approve it in System Settings.
+3. The extension connects to Hotline as the `control` connection and receives the app list. For each new connection of a listed app it opens a `flow` connection to Hotline, says where the app really called and which program it was, then copies the bytes both ways. Other apps are left alone.
+
+The helper app and the extension refuse an address that is not on this Mac. The exact messages are in `docs/protocol.md`.
+
+## Status
+
+- The code builds and its unit tests pass on a GitHub macOS runner (90 percent coverage of `CaptureCore`), and releases are signed, notarized and published from a version tag. See `docs/release-setup.md`.
+- The signed app of release v0.1.0 has been checked on a Mac: the checksum matches, the signature is valid, and macOS accepts it as notarized.
+- The extension has not yet been installed, approved or given a connection on a real Mac, and Hotline's `--capture` flag does not exist yet. The Hotline side that takes the connections is `listen.intercept` with `Options.CaptureApps`.
+
+See `CLAUDE.md` for the working rules.
 
 ## Layout
 
@@ -32,18 +48,18 @@ open HotlineCapture.xcodeproj
 
 Set your Apple team id in `project.yml` (or pass `DEVELOPMENT_TEAM`). Signing and running the extension needs a paid Apple developer account with the Network Extension permission.
 
-## Known doubts to settle on the first run
+## Known doubts to settle on the first real run
 
 - The helper app is a plain program with a run loop, not a full Cocoa application. macOS may insist on one before it shows the approval prompt. If activation hangs or fails with no prompt, switch `App/main.swift` to an `NSApplication` based start.
 - `project.yml` (XcodeGen) may need small changes for embedding the extension under `Contents/Library/SystemExtensions`.
 - `NWHostEndpoint` is marked deprecated in newer macOS versions. It still works and only gives a build warning.
 
-## Checklist for the first run on a Mac
+## Checklist for the first real run on a Mac
 
 1. `swift test` passes and coverage of `CaptureCore` is at least 90 percent.
 2. `xcodegen` makes a project and it builds. Fix project settings that Apple's tools reject.
 3. The app refuses to start without an address, and with an address that is not on this Mac (for example `0.0.0.0:8444`).
-4. With a test listener on a loopback port (a small TCP server that sends the framed `SpecUpdate`): macOS asks for approval once, the extension connects as `control`, and a `SpecUpdate` changes what is captured.
+4. With a test listener, either a loopback port (`127.0.0.1:8444`) or a socket file (`sock:///tmp/capture/capture.sock`, in a folder you own with mode 0700): macOS asks for approval once, the extension connects as `control`, and it receives the app list the listener sends.
 5. A chosen app (for example `curl`) shows up as a `flow` connection with the right destination and program. Another app does not.
 6. Stopping leaves the extension installed. Starting again asks for no second approval.
 
