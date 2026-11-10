@@ -4,7 +4,7 @@ A small Swift app with a system extension (a program macOS runs for the Mac's ne
 
 ## Working rules
 
-- **Ask before building more.** Define requirements with Peter first, then build only after he agrees. Do not start CI runs or watch checks unless Peter asks.
+- **Ask before building more.** Define requirements with Peter first, then build only after he agrees. The CI workflow (`.github/workflows/ci.yml`) runs on every pull request, as Peter asked. Do not watch or poll checks unless Peter asks.
 - **Keep replies compact and plain.** Short sentences, define jargon in plain words, say "ingress" for the ways apps reach the proxy.
 - **Never commit secrets.** No certificates, provisioning profiles, Apple ID or passwords. They live only in this repository's secrets and on Peter's machine.
 
@@ -28,7 +28,7 @@ Test names say the behaviour in plain words (`testOversizedAnnouncementIsRefused
 ## Coverage
 
 - Target: at least 90 percent of lines in `CaptureCore`, and every error path in framing and message checking covered.
-- Measure with `swift test --enable-code-coverage`, then `xcrun llvm-cov report` on the test bundle. Do not lower the target to make a change pass; add tests.
+- CI enforces it with `scripts/check-coverage.sh 90`. Measure by hand with `swift test --enable-code-coverage`, then `xcrun llvm-cov report` on the test bundle. Do not lower the target to make a change pass; add tests.
 - `Extension/` and `App/` are not unit tested. Keep them small. Their behaviour is checked by hand on a real Mac, with the checklist in `README.md`.
 
 ## Coding standards

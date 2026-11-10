@@ -1,0 +1,38 @@
+# Runs the unit tests with a coverage check, and compiles both the app and the
+# extension without signing, on every pull request and every push to main.
+# It uses no secrets, so pull requests from forks can run it safely.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-build:
+    # A standard hosted Apple Silicon runner: free on public repositories.
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unit tests with coverage
+        run: swift test --enable-code-coverage
+
+      - name: Coverage check for CaptureCore (at least 90 percent)
+        run: scripts/check-coverage.sh 90
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate the Xcode project
+        run: xcodegen
+
+      - name: Build the app and the extension without signing
+        run: |
+          xcodebuild -scheme HotlineCapture -configuration Release \
+            -destination 'generic/platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" build
