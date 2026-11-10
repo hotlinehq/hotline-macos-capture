@@ -7,7 +7,7 @@ import Foundation
 /// The contract is in docs/protocol.md.
 public struct ConnectRequest: Equatable {
     /// The version in the Hotline-Capture header. Raise it when the headers change.
-    public static let captureVersion = 2
+    public static let captureVersion = 1
     /// Longer program paths are left out rather than cut, so a record never
     /// names a wrong program. Hotline has the same limit.
     public static let maxProgramLength = 4096

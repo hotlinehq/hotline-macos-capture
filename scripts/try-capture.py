@@ -22,7 +22,7 @@ import socketserver
 import sys
 
 MAX_REPLY = 8 * 1024
-VERSION = "2"
+VERSION = "1"
 
 
 class Handler(socketserver.BaseRequestHandler):
