@@ -83,11 +83,10 @@ public struct InterceptSpec: Equatable {
     }
 
     public func shouldIntercept(_ process: ProcessIdentity) -> Bool {
-        var intercept: Bool
-        if case .exclude = actions.first {
+        // A list that starts with a skip rule means "everything except these".
+        var intercept = false
+        if let first = actions.first, case .exclude = first {
             intercept = true
-        } else {
-            intercept = false
         }
         for action in actions {
             switch action {

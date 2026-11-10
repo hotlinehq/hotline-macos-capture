@@ -30,6 +30,12 @@ open HotlineCapture.xcodeproj
 
 Set your Apple team id in `project.yml` (or pass `DEVELOPMENT_TEAM`). Signing and running the extension needs a paid Apple developer account with the Network Extension permission.
 
+## Known doubts to settle on the first run
+
+- The helper app is a plain program with a run loop, not a full Cocoa application. macOS may insist on one before it shows the approval prompt. If activation hangs or fails with no prompt, switch `App/main.swift` to an `NSApplication` based start.
+- `project.yml` (XcodeGen) may need small changes for embedding the extension under `Contents/Library/SystemExtensions`.
+- `NWHostEndpoint` is marked deprecated in newer macOS versions. It still works and only gives a build warning.
+
 ## Checklist for the first run on a Mac
 
 1. `swift test` passes and coverage of `CaptureCore` is at least 90 percent.
