@@ -2,11 +2,13 @@
 
 This is the contract between this app and the Hotline proxy (Go, in `petercipov/hotline`). Hotline listens; the extension connects. Change this file together with `Sources/CaptureCore/Messages.swift` and raise `captureProtocolVersion`.
 
-## The socket
+## The connection
 
-Hotline creates one Unix socket (a local file-like channel) in a private folder: made by Hotline with a random name, mode 0700, owned by the user. The path is passed to the helper app as its only argument and stored in the proxy setting, so the extension gets it from macOS.
+The extension connects over TCP to Hotline's `listen.intercept` port. Hotline passes the address as `host:port` to the helper app as its only argument, and the helper stores it in the proxy setting, so the extension gets it from macOS. The address must be a loopback address (`127.x.x.x`, `::1` in brackets, or `localhost`), so only this Mac can reach it; the helper app and the extension both refuse anything else. Hotline refuses to start when asked to capture on an address that is not loopback, and does not check who connects.
 
-At start, Hotline checks that the folder is owned by the current user and has mode 0700, and refuses to start otherwise. It does not check who connects: the private folder keeps other users out, and programs of the same user are trusted.
+The extension never hands over connections to loopback addresses, so its own connection to Hotline is never captured. This also means a captured app's calls to services on this Mac are not captured.
+
+The same port also takes TLS connections from apps (the intercept ingress). The first byte tells them apart: a TLS handshake starts with 0x16, and the messages below start with the size of the body, so with 0x00. Hotline takes these messages only when it was asked to capture apps; otherwise they are refused like any bytes that are not TLS.
 
 ## Framing
 
@@ -14,7 +16,7 @@ Every message is: 4 bytes with the size of the body (big endian), then the body 
 
 ## Connections
 
-The extension opens two kinds of connection to the same socket. Its first message says which.
+The extension opens two kinds of connection to the same port. Its first message says which.
 
 ### Control (one, kept open)
 

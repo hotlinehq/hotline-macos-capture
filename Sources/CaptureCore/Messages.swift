@@ -1,6 +1,6 @@
 import Foundation
 
-/// Version of the messages on the sockets. Raise it when a message changes.
+/// Version of the messages to Hotline. Raise it when a message changes.
 /// A message with a different version is refused.
 public let captureProtocolVersion = 1
 
@@ -16,7 +16,7 @@ public enum Role: String, Codable, Equatable {
     case flow
 }
 
-/// First message from the extension on every socket it opens.
+/// First message from the extension on every connection it opens.
 public struct ClientHello: Codable, Equatable {
     public var version: Int
     public var role: Role

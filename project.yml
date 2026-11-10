@@ -40,6 +40,8 @@ targets:
         embed: true
         codeSign: true
         destinationPath: $(SYSTEM_EXTENSIONS_FOLDER_PATH)
+      - package: HotlineCapture
+        product: CaptureCore
   HotlineCaptureExtension:
     type: system-extension
     platform: macOS

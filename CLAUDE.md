@@ -1,6 +1,6 @@
 # Hotline Capture (macOS)
 
-A small Swift app with a system extension (a program macOS runs for the Mac's network traffic) that picks out the secure calls of chosen apps and hands them to the Hotline proxy over local sockets. The Hotline proxy itself lives in `petercipov/hotline` and is written in Go. Requirements: `mitmproxy-ideas/wrap-command-requirements.md` in the Hotline project files (decided points are marked there).
+A small Swift app with a system extension (a program macOS runs for the Mac's network traffic) that picks out the secure calls of chosen apps and hands them to the Hotline proxy's `listen.intercept` port on this Mac. The Hotline proxy itself lives in `petercipov/hotline` and is written in Go. Requirements: `mitmproxy-ideas/wrap-command-requirements.md` in the Hotline project files (decided points are marked there).
 
 ## Working rules
 
@@ -12,7 +12,7 @@ A small Swift app with a system extension (a program macOS runs for the Mac's ne
 
 - Apple Silicon only, macOS 13 or newer. No Intel build.
 - No third-party dependencies. Foundation, Network and NetworkExtension only. This keeps the app small and the signing simple.
-- `Sources/CaptureCore`: everything that needs no macOS network APIs (the app list, the socket messages, framing). All logic goes here.
+- `Sources/CaptureCore`: everything that needs no macOS network APIs (the app list, the messages, framing, the address check). All logic goes here.
 - `Extension/` and `App/`: thin layers. They only call macOS APIs and `CaptureCore`. If code in them grows a decision, move the decision into `CaptureCore` and test it there.
 - `docs/protocol.md` is the contract with the Go proxy. Change it together with `Messages.swift` and raise `captureProtocolVersion` when a message changes.
 
@@ -41,7 +41,7 @@ Test names say the behaviour in plain words (`testOversizedAnnouncementIsRefused
 
 ## Security rules (from the requirements)
 
-- Sockets live in a private folder with a random name, open only to the user and root. The Go proxy creates them; this app only connects.
+- The extension connects over TCP to Hotline's `listen.intercept` port. The address must be a loopback address (`CaptureAddress` refuses anything else, in the app and again in the extension), and the extension never hands over loopback connections. The Go proxy has the same rule and does not check who connects.
 - Refuse any message with an unknown version or a size over `Framing.maxFrameSize`.
 - Never capture Hotline's own processes. The app list from the proxy always skips them.
 

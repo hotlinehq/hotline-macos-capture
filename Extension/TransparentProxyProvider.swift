@@ -7,28 +7,43 @@ import OSLog
 let log = Logger(subsystem: "io.github.petercipov.hotlinecapture", category: "extension")
 
 enum ProviderError: Error {
-    case socketPathMissing
+    case addressMissing
+    case addressRefused(String)
 }
 
 /// macOS calls this class for every new outgoing connection on the Mac.
 /// It only decides "capture or not" and copies bytes. It never reads or
 /// changes what is inside a connection.
 class TransparentProxyProvider: NETransparentProxyProvider {
-    private var socketPath: String?
+    private var address: CaptureAddress?
     private var control: NWConnection?
     private let specLock = NSLock()
     private var spec = InterceptSpec(parsing: [])  // empty: capture nothing
 
+    /// A TCP connection to Hotline's intercept port.
+    private static func connection(to address: CaptureAddress) -> NWConnection {
+        NWConnection(
+            host: NWEndpoint.Host(address.host), port: NWEndpoint.Port(rawValue: address.port)!,
+            using: .tcp)
+    }
+
     // MARK: Start and stop
 
     override func startProxy(options: [String: Any]? = nil) async throws {
-        guard let path = protocolConfiguration.serverAddress else {
-            throw ProviderError.socketPathMissing
+        guard let text = protocolConfiguration.serverAddress else {
+            throw ProviderError.addressMissing
         }
-        socketPath = path
+        // The app already checked this; check again, since the setting could have been changed.
+        let address: CaptureAddress
+        do {
+            address = try CaptureAddress(parsing: text)
+        } catch {
+            throw ProviderError.addressRefused(text)
+        }
+        self.address = address
 
         // 1. Open the control connection and say hello. Hotline answers with the app list.
-        let control = NWConnection(to: .unix(path: path), using: .tcp)
+        let control = Self.connection(to: address)
         self.control = control
         try await control.establish()
         try await control.sendBytes(Framing.encode(ClientHello.control()))
@@ -40,6 +55,16 @@ class TransparentProxyProvider: NETransparentProxyProvider {
             NENetworkRule(
                 remoteNetwork: nil, remotePrefix: 0, localNetwork: nil, localPrefix: 0,
                 protocol: .any, direction: .outbound)
+        ]
+        // Never hand over connections to this Mac itself: that includes our own connection to
+        // Hotline, which would otherwise loop when everything is captured.
+        settings.excludedNetworkRules = [
+            NENetworkRule(
+                remoteNetwork: NWHostEndpoint(hostname: "127.0.0.0", port: "0"), remotePrefix: 8,
+                localNetwork: nil, localPrefix: 0, protocol: .any, direction: .outbound),
+            NENetworkRule(
+                remoteNetwork: NWHostEndpoint(hostname: "::1", port: "0"), remotePrefix: 128,
+                localNetwork: nil, localPrefix: 0, protocol: .any, direction: .outbound),
         ]
         try await setTunnelNetworkSettings(settings)
         log.debug("capture started")
@@ -92,11 +117,11 @@ class TransparentProxyProvider: NETransparentProxyProvider {
             transport: .tcp, host: remote.hostname, port: port, pid: process.pid,
             processName: process.path)
 
-        guard let path = socketPath else { return false }
+        guard let address = address else { return false }
         Task {
             do {
                 try await tcp.open(withLocalEndpoint: nil)
-                let connection = NWConnection(to: .unix(path: path), using: .tcp)
+                let connection = Self.connection(to: address)
                 try await connection.establish()
                 try await connection.sendBytes(Framing.encode(hello))
                 Copier.run(flow: tcp, connection: connection)

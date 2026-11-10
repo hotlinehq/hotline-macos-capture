@@ -1,6 +1,6 @@
 # hotline-macos-capture
 
-Sends the secure calls of chosen apps on a Mac to a local [Hotline](https://github.com/petercipov/hotline) proxy. A small Swift app installs a macOS system extension (a program macOS runs for the Mac's network traffic). The extension finds which program made each connection and, if the program is on the app list, hands the connection to Hotline over a local socket.
+Sends the secure calls of chosen apps on a Mac to a local [Hotline](https://github.com/petercipov/hotline) proxy. A small Swift app installs a macOS system extension (a program macOS runs for the Mac's network traffic). The extension finds which program made each connection and, if the program is on the app list, hands the connection to Hotline's `listen.intercept` port on this Mac.
 
 Apple Silicon only, macOS 13 or newer.
 
@@ -8,7 +8,7 @@ Apple Silicon only, macOS 13 or newer.
 
 ## Layout
 
-- `Sources/CaptureCore`: the app list and the socket messages. All logic, fully unit tested.
+- `Sources/CaptureCore`: the app list, the messages to Hotline and the address check. All logic, fully unit tested.
 - `Extension/`: the system extension (thin layer over macOS).
 - `App/`: the helper app that installs the extension (thin layer).
 - `project.yml`: Xcode project description for XcodeGen.
@@ -42,8 +42,8 @@ Set your Apple team id in `project.yml` (or pass `DEVELOPMENT_TEAM`). Signing an
 
 1. `swift test` passes and coverage of `CaptureCore` is at least 90 percent.
 2. `xcodegen` makes a project and it builds. Fix project settings that Apple's tools reject.
-3. The app refuses to start without a path, and with a path in a shared folder.
-4. With a test listener on a private socket: macOS asks for approval once, the extension connects as `control`, and a `SpecUpdate` changes what is captured.
+3. The app refuses to start without an address, and with an address that is not on this Mac (for example `0.0.0.0:8444`).
+4. With a test listener on a loopback port (a small TCP server that sends the framed `SpecUpdate`): macOS asks for approval once, the extension connects as `control`, and a `SpecUpdate` changes what is captured.
 5. A chosen app (for example `curl`) shows up as a `flow` connection with the right destination and program. Another app does not.
 6. Stopping leaves the extension installed. Starting again asks for no second approval.
 
