@@ -24,12 +24,14 @@ targets:
     type: application
     platform: macOS
     sources: [App]
-    info:
-      path: App/Info.plist
-    entitlements:
-      path: App/App.entitlements
+    # The Info.plist and entitlements files are ours: they are named in build settings only.
+    # XcodeGen's own `info:` and `entitlements:` blocks would overwrite them with near empty
+    # files (the first release shipped that way and macOS refused to install the extension).
     settings:
       base:
+        INFOPLIST_FILE: App/Info.plist
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+        GENERATE_INFOPLIST_FILE: NO
         PRODUCT_BUNDLE_IDENTIFIER: io.github.petercipov.hotlinecapture
         PRODUCT_NAME: Hotline Capture
         CODE_SIGN_STYLE: Manual
@@ -46,12 +48,11 @@ targets:
     type: system-extension
     platform: macOS
     sources: [Extension]
-    info:
-      path: Extension/Info.plist
-    entitlements:
-      path: Extension/Extension.entitlements
     settings:
       base:
+        INFOPLIST_FILE: Extension/Info.plist
+        CODE_SIGN_ENTITLEMENTS: Extension/Extension.entitlements
+        GENERATE_INFOPLIST_FILE: NO
         PRODUCT_BUNDLE_IDENTIFIER: io.github.petercipov.hotlinecapture.extension
         PRODUCT_NAME: io.github.petercipov.hotlinecapture.extension
         SWIFT_OBJC_BRIDGING_HEADER: Extension/Bridging-Header.h
