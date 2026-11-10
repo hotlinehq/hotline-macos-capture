@@ -1,0 +1,64 @@
+# Xcode project description for XcodeGen (https://github.com/yonaskolb/XcodeGen).
+# On a Mac: `brew install xcodegen && xcodegen`, then open HotlineCapture.xcodeproj.
+# The generated project is not committed (see .gitignore).
+# NOT YET TRIED: written without a Mac. Expect small fixes on the first run.
+name: HotlineCapture
+options:
+  deploymentTarget:
+    macOS: "13.0"
+settings:
+  base:
+    ARCHS: arm64
+    ONLY_ACTIVE_ARCH: NO
+    SWIFT_VERSION: "5.9"
+    # Set your Apple team id here or pass DEVELOPMENT_TEAM=... to xcodebuild.
+    DEVELOPMENT_TEAM: ""
+    MARKETING_VERSION: "0.1.0"
+    # Raise this on EVERY change to the extension, or macOS keeps the old one.
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  HotlineCapture:
+    path: .
+targets:
+  HotlineCapture:
+    type: application
+    platform: macOS
+    sources: [App]
+    info:
+      path: App/Info.plist
+    entitlements:
+      path: App/App.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.petercipov.hotlinecapture
+        PRODUCT_NAME: Hotline Capture
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Developer ID Application"
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - target: HotlineCaptureExtension
+        embed: true
+        codeSign: true
+        destinationPath: $(SYSTEM_EXTENSIONS_FOLDER_PATH)
+  HotlineCaptureExtension:
+    type: system-extension
+    platform: macOS
+    sources: [Extension]
+    info:
+      path: Extension/Info.plist
+    entitlements:
+      path: Extension/Extension.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.petercipov.hotlinecapture.extension
+        PRODUCT_NAME: io.github.petercipov.hotlinecapture.extension
+        SWIFT_OBJC_BRIDGING_HEADER: Extension/Bridging-Header.h
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Developer ID Application"
+        ENABLE_HARDENED_RUNTIME: YES
+        SWIFT_OPTIMIZATION_LEVEL: -Osize
+        DEAD_CODE_STRIPPING: YES
+        STRIP_INSTALLED_PRODUCT: YES
+    dependencies:
+      - package: HotlineCapture
+        product: CaptureCore
