@@ -1,6 +1,6 @@
-# How the extension talks to Hotline (capture version 1)
+# How the extension talks to Hotline (capture version 2)
 
-This is the contract between this app and the Hotline proxy (Go, in `petercipov/hotline`). It is plain HTTP: a CONNECT request with three headers of ours. Change this file together with `Sources/CaptureCore/ConnectRequest.swift`, and raise `ConnectRequest.captureVersion` when a header changes.
+This is the contract between this app and the Hotline proxy (Go, in `petercipov/hotline`). It is plain HTTP: a CONNECT request with a `User-Agent` and three headers of ours. Change this file together with `Sources/CaptureCore/ConnectRequest.swift`, and raise `ConnectRequest.captureVersion` when a header changes.
 
 ## Starting and stopping
 
@@ -20,12 +20,14 @@ For each new TCP connection of a listed app, the extension connects to the addre
 ```
 CONNECT 93.184.215.14:443 HTTP/1.1
 Host: 93.184.215.14:443
-Hotline-Capture: 1
+User-Agent: HotlineCapture/0.1.1
+Hotline-Capture: 2
 Hotline-Capture-Pid: 4242
 Hotline-Capture-Program: /usr/bin/curl
 ```
 
 - The target is where the app really called, as macOS reports it (usually an address). IPv6 is written in brackets.
+- `User-Agent` names this app and its release version (`CFBundleShortVersionString`), so Hotline can tell which build captured a call. It is not the captured app's own user agent. The version holds only letters, digits, dots and dashes, at most 32 bytes.
 - `Hotline-Capture` says the connection was captured; its value is the version.
 - `Hotline-Capture-Pid` is the process number of the program.
 - `Hotline-Capture-Program` is the program path, as UTF-8. It is left out when unknown, longer than 4096 bytes, or holding a control character.

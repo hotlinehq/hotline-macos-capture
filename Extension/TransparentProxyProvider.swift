@@ -21,6 +21,10 @@ class TransparentProxyProvider: NETransparentProxyProvider {
     private var watch: HotlineWatch?
 
     /// A TCP connection to Hotline's proxy port.
+    /// The release version, read from the extension's own Info.plist, for the User-Agent.
+    static let appVersion =
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+
     static func connection(to address: CaptureAddress) -> NWConnection {
         NWConnection(
             host: NWEndpoint.Host(address.host), port: NWEndpoint.Port(rawValue: address.port)!,
@@ -98,7 +102,8 @@ class TransparentProxyProvider: NETransparentProxyProvider {
         else { return false }
         guard let remote = tcp.remoteEndpoint as? NWHostEndpoint, let port = UInt16(remote.port),
             let request = try? ConnectRequest(
-                host: remote.hostname, port: port, pid: process.pid, program: process.path)
+                host: remote.hostname, port: port, pid: process.pid, program: process.path,
+                agentVersion: Self.appVersion)
         else { return false }
 
         Task {

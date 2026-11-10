@@ -81,4 +81,38 @@ spctl --assess --type execute --verbose "$APP"
 
 tar --create --file dist/HotlineCapture.app.tar --cd build "Hotline Capture.app"
 (cd dist && shasum -a 256 HotlineCapture.app.tar > HotlineCapture.app.tar.sha256)
-echo "Done: dist/HotlineCapture.app.tar and its checksum."
+# The software bill of materials: a list of what is inside the app, in the CycloneDX format.
+# There are no third-party libraries, only Apple's own frameworks, so the list is short and written by hand.
+cat > dist/HotlineCapture.sbom.cdx.json <<SBOM
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "component": {
+      "type": "application",
+      "bom-ref": "hotline-capture",
+      "name": "Hotline Capture",
+      "version": "${VERSION}",
+      "purl": "pkg:github/petercipov/hotline-macos-capture@v${VERSION}",
+      "licenses": [{ "license": { "id": "Apache-2.0" } }]
+    },
+    "tools": { "components": [
+      { "type": "application", "name": "xcodegen", "version": "$(xcodegen --version | grep -oE '[0-9]+(\.[0-9]+)+' | head -1)", "description": "Build time only, not shipped" }
+    ] }
+  },
+  "components": [
+    { "type": "library", "bom-ref": "extension", "name": "io.github.petercipov.hotlinecapture.extension", "version": "${VERSION}", "description": "System extension inside the app" },
+    { "type": "framework", "name": "Foundation", "description": "Apple system framework, not bundled" },
+    { "type": "framework", "name": "Network", "description": "Apple system framework, not bundled" },
+    { "type": "framework", "name": "NetworkExtension", "description": "Apple system framework, not bundled" }
+  ],
+  "dependencies": [
+    { "ref": "hotline-capture", "dependsOn": ["extension"] }
+  ]
+}
+SBOM
+python3 -c 'import json,sys; json.load(open(sys.argv[1]))' dist/HotlineCapture.sbom.cdx.json
+(cd dist && shasum -a 256 HotlineCapture.sbom.cdx.json >> HotlineCapture.app.tar.sha256)
+echo "Done: dist/HotlineCapture.app.tar, the SBOM and their checksums."

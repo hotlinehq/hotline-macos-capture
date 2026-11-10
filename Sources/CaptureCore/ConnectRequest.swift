@@ -2,33 +2,40 @@ import Foundation
 
 /// The request the extension sends to Hotline's proxy port for one captured
 /// connection: a standard HTTP CONNECT to where the app really called, with
-/// three headers of ours that say it was captured and which program made it.
+/// a standard User-Agent that names this app and its version, and three headers
+/// of ours that say it was captured and which program made it.
 /// The contract is in docs/protocol.md.
 public struct ConnectRequest: Equatable {
     /// The version in the Hotline-Capture header. Raise it when the headers change.
-    public static let captureVersion = 1
+    public static let captureVersion = 2
     /// Longer program paths are left out rather than cut, so a record never
     /// names a wrong program. Hotline has the same limit.
     public static let maxProgramLength = 4096
     private static let maxHostLength = 253
+    private static let maxAgentVersionLength = 32
 
     public enum RequestError: Error, Equatable {
         case badHost
         case badPort
+        case badAgentVersion
     }
 
     public let host: String
     public let port: UInt16
     public let pid: UInt32
+    /// The release version of this app, such as 0.1.1, sent in the User-Agent.
+    public let agentVersion: String
     /// The program path, or nil when it is not known or could not be sent safely.
     public let program: String?
 
-    public init(host: String, port: UInt16, pid: UInt32, program: String?) throws {
+    public init(host: String, port: UInt16, pid: UInt32, program: String?, agentVersion: String) throws {
         guard ConnectRequest.isHost(host) else { throw RequestError.badHost }
         guard port > 0 else { throw RequestError.badPort }
+        guard ConnectRequest.isAgentVersion(agentVersion) else { throw RequestError.badAgentVersion }
         self.host = host
         self.port = port
         self.pid = pid
+        self.agentVersion = agentVersion
         self.program = program.flatMap { ConnectRequest.isSafeHeaderValue($0) ? $0 : nil }
     }
 
@@ -37,6 +44,7 @@ public struct ConnectRequest: Equatable {
         let authority = host.contains(":") ? "[\(host)]:\(port)" : "\(host):\(port)"
         var text = "CONNECT \(authority) HTTP/1.1\r\n"
         text += "Host: \(authority)\r\n"
+        text += "User-Agent: HotlineCapture/\(agentVersion)\r\n"
         text += "Hotline-Capture: \(ConnectRequest.captureVersion)\r\n"
         text += "Hotline-Capture-Pid: \(pid)\r\n"
         if let program = program {
@@ -53,6 +61,15 @@ public struct ConnectRequest: Equatable {
         return host.unicodeScalars.allSatisfy { scalar in
             scalar.isASCII
                 && (CharacterSet.alphanumerics.contains(scalar) || ".-_:".unicodeScalars.contains(scalar))
+        }
+    }
+
+    /// A version is short and made of letters, digits, dots and dashes, so it
+    /// cannot break the header it is written into.
+    private static func isAgentVersion(_ version: String) -> Bool {
+        guard !version.isEmpty, version.utf8.count <= maxAgentVersionLength else { return false }
+        return version.unicodeScalars.allSatisfy { scalar in
+            scalar.isASCII && (CharacterSet.alphanumerics.contains(scalar) || ".-".unicodeScalars.contains(scalar))
         }
     }
 

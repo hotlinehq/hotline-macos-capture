@@ -8,53 +8,64 @@ final class ConnectRequestTests: XCTestCase {
 
     func testRequestNamesTheDestinationAndTheProgram() throws {
         let request = try ConnectRequest(
-            host: "93.184.215.14", port: 443, pid: 4242, program: "/usr/bin/curl")
+            host: "93.184.215.14", port: 443, pid: 4242, program: "/usr/bin/curl", agentVersion: "0.1.1")
         XCTAssertEqual(
             text(request),
             "CONNECT 93.184.215.14:443 HTTP/1.1\r\n"
                 + "Host: 93.184.215.14:443\r\n"
-                + "Hotline-Capture: 1\r\n"
+                + "User-Agent: HotlineCapture/0.1.1\r\n"
+                + "Hotline-Capture: 2\r\n"
                 + "Hotline-Capture-Pid: 4242\r\n"
                 + "Hotline-Capture-Program: /usr/bin/curl\r\n"
                 + "\r\n")
     }
 
     func testIPv6DestinationIsWrittenInBrackets() throws {
-        let request = try ConnectRequest(host: "2001:db8::1", port: 443, pid: 1, program: nil)
+        let request = try ConnectRequest(host: "2001:db8::1", port: 443, pid: 1, program: nil, agentVersion: "0.1.1")
         XCTAssertTrue(
             text(request).hasPrefix("CONNECT [2001:db8::1]:443 HTTP/1.1\r\nHost: [2001:db8::1]:443\r\n"))
     }
 
     func testUnknownProgramLeavesOutItsHeader() throws {
-        let request = try ConnectRequest(host: "a.example", port: 443, pid: 7, program: nil)
+        let request = try ConnectRequest(host: "a.example", port: 443, pid: 7, program: nil, agentVersion: "0.1.1")
         XCTAssertFalse(text(request).contains("Hotline-Capture-Program"))
         XCTAssertTrue(text(request).contains("Hotline-Capture-Pid: 7\r\n"))
     }
 
     func testProgramPathWithSpacesAndLettersBeyondAsciiIsKept() throws {
         let path = "/Applications/Café App.app/Contents/MacOS/Café App"
-        let request = try ConnectRequest(host: "a.example", port: 443, pid: 7, program: path)
+        let request = try ConnectRequest(host: "a.example", port: 443, pid: 7, program: path, agentVersion: "0.1.1")
         XCTAssertTrue(text(request).contains("Hotline-Capture-Program: \(path)\r\n"))
     }
 
     func testProgramPathThatCouldEndTheHeaderIsLeftOut() throws {
         let paths = ["/tmp/a\r\nHost: evil", "/tmp/a\nb", "/tmp/\u{7f}", String(repeating: "a", count: 4097)]
         for path in paths {
-            let request = try ConnectRequest(host: "a.example", port: 443, pid: 7, program: path)
+            let request = try ConnectRequest(host: "a.example", port: 443, pid: 7, program: path, agentVersion: "0.1.1")
             XCTAssertFalse(text(request).contains("Hotline-Capture-Program"), path)
         }
     }
 
     func testDestinationThatIsNotAHostIsRefused() {
         for host in ["", "a b", "a/b", "a\r\nb", "a@b", String(repeating: "a", count: 254)] {
-            XCTAssertThrowsError(try ConnectRequest(host: host, port: 443, pid: 1, program: nil), host) {
+            XCTAssertThrowsError(try ConnectRequest(host: host, port: 443, pid: 1, program: nil, agentVersion: "0.1.1"), host) {
                 XCTAssertEqual($0 as? ConnectRequest.RequestError, .badHost, host)
             }
         }
     }
 
+    func testAgentVersionThatCouldBreakTheHeaderIsRefused() {
+        for version in ["", "0.1 1", "0.1\r\nX: y", "1/2", String(repeating: "1", count: 33)] {
+            XCTAssertThrowsError(
+                try ConnectRequest(host: "a.example", port: 443, pid: 1, program: nil, agentVersion: version), version
+            ) {
+                XCTAssertEqual($0 as? ConnectRequest.RequestError, .badAgentVersion, version)
+            }
+        }
+    }
+
     func testPortZeroIsRefused() {
-        XCTAssertThrowsError(try ConnectRequest(host: "a.example", port: 0, pid: 1, program: nil)) {
+        XCTAssertThrowsError(try ConnectRequest(host: "a.example", port: 0, pid: 1, program: nil, agentVersion: "0.1.1")) {
             XCTAssertEqual($0 as? ConnectRequest.RequestError, .badPort)
         }
     }
