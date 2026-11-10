@@ -1,4 +1,4 @@
-# How the extension talks to Hotline (capture version 2)
+# How the extension talks to Hotline (capture version 1)
 
 This is the contract between this app and the Hotline proxy (Go, in `petercipov/hotline`). It is plain HTTP: a CONNECT request with a `User-Agent` and three headers of ours. Change this file together with `Sources/CaptureCore/ConnectRequest.swift`, and raise `ConnectRequest.captureVersion` when a header changes.
 
@@ -21,7 +21,7 @@ For each new TCP connection of a listed app, the extension connects to the addre
 CONNECT 93.184.215.14:443 HTTP/1.1
 Host: 93.184.215.14:443
 User-Agent: HotlineCapture/0.1.1
-Hotline-Capture: 2
+Hotline-Capture: 1
 Hotline-Capture-Pid: 4242
 Hotline-Capture-Program: /usr/bin/curl
 ```
