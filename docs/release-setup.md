@@ -66,6 +66,10 @@ The release workflow checks that all seven exist and names any that are missing.
 
 ## 7. Make a release
 
+**With the button (no git needed):** in the repository, Actions, **Release**, **Run workflow**, keep branch `main`, type a version such as `0.1.0`, **Run workflow**. The release creates the tag `v0.1.0` itself. The button refuses to run from any branch other than main.
+
+**With a tag:**
+
 ```
 git tag v0.1.0
 git push origin v0.1.0

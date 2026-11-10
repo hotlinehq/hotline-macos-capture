@@ -1,21 +1,50 @@
-# Builds, signs, notarizes and publishes Hotline Capture when a version tag is pushed.
-# Only tags start it, never pull requests, because it uses the Apple secrets.
+# Builds, signs, notarizes and publishes Hotline Capture. Two ways to start it:
+#   1. push a tag such as v0.1.0, or
+#   2. the "Run workflow" button in the Actions tab, with a version such as 0.1.0.
+#      The release then creates the tag itself, on the commit of main that was built.
+# Never started by pull requests, because it uses the Apple secrets.
 # The one-time setup of those secrets is in docs/release-setup.md.
 name: Release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, numbers only, for example 0.1.0"
+        required: true
+        type: string
 
 permissions:
   contents: write # to attach the files to the GitHub release
 
 jobs:
   release:
+    # The button only works from main, so a stray branch cannot publish a release.
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     runs-on: macos-15
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
+      - name: Work out the version
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT" = "push" ]; then
+            VERSION="${REF_NAME#v}"
+          else
+            VERSION="$INPUT_VERSION"
+          fi
+          # Apple allows only numbers and dots in a version.
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Version '$VERSION' must look like 0.1.0 (numbers only)."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Check that all secrets are set
         env:
@@ -76,17 +105,20 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          # Tag v1.2.3 gives version 1.2.3. The build number rises with every run,
-          # as the extension needs, or macOS keeps the old one.
-          VERSION="${GITHUB_REF_NAME#v}" BUILD_NUMBER="$GITHUB_RUN_NUMBER" scripts/build-release.sh
+          # The build number rises with every run, as the extension needs,
+          # or macOS keeps the old one.
+          BUILD_NUMBER="$GITHUB_RUN_NUMBER" scripts/build-release.sh
 
       - name: Publish the files on the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
+          # With a pushed tag this uses that tag. With the button it creates the tag
+          # v<version> on the commit that was built.
+          gh release create "v$VERSION" \
             dist/HotlineCapture.app.tar dist/HotlineCapture.app.tar.sha256 \
-            --title "Hotline Capture $GITHUB_REF_NAME" \
+            --target "$GITHUB_SHA" \
+            --title "Hotline Capture v$VERSION" \
             --notes "Signed and notarized, Apple Silicon only, macOS 13 or newer. Verify the download against the .sha256 file."
 
       - name: Remove the temporary keychain and profiles
