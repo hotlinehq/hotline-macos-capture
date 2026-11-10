@@ -96,8 +96,16 @@ jobs:
 
           PROFILES="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILES"
-          echo "$APPLE_PROVISIONING_PROFILE_APP" | base64 --decode > "$PROFILES/app.provisionprofile"
-          echo "$APPLE_PROVISIONING_PROFILE_EXT" | base64 --decode > "$PROFILES/ext.provisionprofile"
+          # Xcode finds a profile by its name (PROVISIONING_PROFILE_SPECIFIER in project.yml)
+          # among the files here; each file is named by the profile's own id, as Xcode does.
+          install_profile() {
+            profile="$RUNNER_TEMP/profile.provisionprofile"
+            echo "$1" | base64 --decode > "$profile"
+            uuid="$(security cms -D -i "$profile" | plutil -extract UUID raw -)"
+            mv "$profile" "$PROFILES/$uuid.provisionprofile"
+          }
+          install_profile "$APPLE_PROVISIONING_PROFILE_APP"
+          install_profile "$APPLE_PROVISIONING_PROFILE_EXT"
 
       - name: Build, sign and notarize
         env:
