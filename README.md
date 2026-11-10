@@ -54,6 +54,17 @@ Set your Apple team id in `project.yml` (or pass `DEVELOPMENT_TEAM`). Signing an
 - `project.yml` (XcodeGen) may need small changes for embedding the extension under `Contents/Library/SystemExtensions`.
 - `NWHostEndpoint` is marked deprecated in newer macOS versions. It still works and only gives a build warning.
 
+## Try it by hand (on a Mac)
+
+`scripts/try-capture.py` stands in for Hotline: it answers the extension's control connection with an app list and prints each captured connection. It needs only the Python 3 that macOS brings with its developer tools.
+
+1. Download `HotlineCapture.app.tar` and its `.sha256` file from the [latest release](https://github.com/petercipov/hotline-macos-capture/releases/latest), check them with `shasum -a 256 -c HotlineCapture.app.tar.sha256`, and unpack the tar in `/Applications` (macOS installs system extensions only from there).
+2. In one terminal, start the stand-in: `python3 scripts/try-capture.py --apps curl`. It listens on `127.0.0.1:8444`; `--listen sock:///tmp/capture/capture.sock` uses a socket file instead, in a folder you own with mode 0700.
+3. In a second terminal, start the helper app with the same address: `"/Applications/Hotline Capture.app/Contents/MacOS/Hotline Capture" 127.0.0.1:8444`. The first time, macOS asks you to approve the extension in System Settings, Privacy and Security. Approve it and the helper app finishes.
+4. The stand-in prints `control connection from the extension` and the app list it sent.
+5. In a third terminal run `curl https://example.com`. The stand-in prints `captured: example.com:443 from process ... /usr/bin/curl` and that the first byte is `0x16`. The curl call itself then fails, because the stand-in does not answer. Other programs keep working.
+6. Stop the stand-in with Ctrl-C. The extension stops capturing.
+
 ## Checklist for the first real run on a Mac
 
 1. `swift test` passes and coverage of `CaptureCore` is at least 90 percent.
