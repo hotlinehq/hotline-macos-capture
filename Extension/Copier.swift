@@ -2,7 +2,7 @@ import Foundation
 import Network
 import NetworkExtension
 
-/// Copies bytes both ways between an app's connection and the socket to Hotline.
+/// Copies bytes both ways between an app's connection and the connection to Hotline.
 /// It never looks inside the bytes.
 enum Copier {
     static func run(flow: NEAppProxyTCPFlow, connection: NWConnection) {

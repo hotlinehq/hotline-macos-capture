@@ -1,3 +1,4 @@
+import CaptureCore
 import Foundation
 import NetworkExtension
 import SystemExtensions
@@ -5,18 +6,6 @@ import OSLog
 
 let log = Logger(subsystem: "io.github.petercipov.hotlinecapture", category: "app")
 let extensionIdentifier = "io.github.petercipov.hotlinecapture.extension"
-
-/// Checks that the socket Hotline made sits in a private folder: absolute path,
-/// folder owned by this user, closed to everyone else (requirement 14).
-func checkSocketPath(_ path: String) -> String? {
-    guard path.hasPrefix("/") else { return "The socket path must be absolute." }
-    let folder = (path as NSString).deletingLastPathComponent
-    var info = stat()
-    guard stat(folder, &info) == 0 else { return "The socket folder does not exist." }
-    guard info.st_uid == getuid() else { return "The socket folder is not owned by you." }
-    guard info.st_mode & 0o077 == 0 else { return "The socket folder must be closed to other users (mode 0700)." }
-    return nil
-}
 
 func fail(_ message: String) -> Never {
     FileHandle.standardError.write(Data("Hotline Capture: \(message)\n".utf8))
@@ -62,8 +51,8 @@ final class Installer: NSObject, OSSystemExtensionRequestDelegate {
     }
 }
 
-/// Saves the proxy setting, with the socket path inside it, and switches it on.
-func startProxy(socketPath: String) async throws {
+/// Saves the proxy setting, with Hotline's address inside it, and switches it on.
+func startProxy(target: CaptureTarget) async throws {
     let managers = try await NETransparentProxyManager.loadAllFromPreferences()
     let manager = managers.first(where: {
         ($0.protocolConfiguration as? NETunnelProviderProtocol)?.providerBundleIdentifier == extensionIdentifier
@@ -71,7 +60,7 @@ func startProxy(socketPath: String) async throws {
 
     let provider = NETunnelProviderProtocol()
     provider.providerBundleIdentifier = extensionIdentifier
-    provider.serverAddress = socketPath
+    provider.serverAddress = target.text
     manager.protocolConfiguration = provider
     manager.localizedDescription = "Hotline Capture"
     manager.isEnabled = true
@@ -81,17 +70,28 @@ func startProxy(socketPath: String) async throws {
     try manager.connection.startVPNTunnel()
 }
 
-// The only argument is the path of the socket that Hotline is listening on.
+// The only argument is where Hotline listens: the address of its intercept port, such as
+// 127.0.0.1:8444, or a socket file for testing, as sock:// and an absolute path.
 guard CommandLine.arguments.count == 2 else {
     fail("This helper is started by Hotline and cannot be run on its own.")
 }
-let socketPath = CommandLine.arguments[1]
-if let problem = checkSocketPath(socketPath) { fail(problem) }
+let target: CaptureTarget
+do {
+    target = try CaptureTarget(parsing: CommandLine.arguments[1])
+} catch CaptureAddress.ParseError.notLoopback {
+    fail("The address must be on this Mac only, such as 127.0.0.1:8444.")
+} catch CaptureTarget.ParseError.pathNotAbsolute {
+    fail("After sock:// the path of the socket file must start with a slash, as in sock:///tmp/capture/capture.sock.")
+} catch is CaptureTarget.SocketFolderError {
+    fail("The folder of the socket file must exist, be owned by you and be closed to other users (mode 0700).")
+} catch {
+    fail("The argument must be an address and a port, such as 127.0.0.1:8444, or sock:// and the path of a socket file.")
+}
 
 Task {
     do {
         try await Installer.run()
-        try await startProxy(socketPath: socketPath)
+        try await startProxy(target: target)
         exit(0)
     } catch {
         fail("could not start capture: \(error.localizedDescription)")

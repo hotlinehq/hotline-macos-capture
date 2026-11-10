@@ -1,7 +1,7 @@
 import Foundation
 import Network
 
-/// Small helpers around NWConnection for the local sockets to Hotline.
+/// Small helpers around NWConnection for the connections to Hotline.
 enum SocketError: Error {
     case closed
 }

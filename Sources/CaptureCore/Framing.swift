@@ -35,7 +35,7 @@ public struct FrameDecoder {
     }
 
     /// Bytes received but not yet used by a message. After the first message
-    /// on a flow socket, these belong to the connection's own content.
+    /// on a flow connection, these belong to the connection's own content.
     public var remainder: Data { buffer }
 
     /// Returns the next whole message, or nil when more bytes are needed.
