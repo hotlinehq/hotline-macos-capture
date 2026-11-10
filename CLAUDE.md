@@ -41,7 +41,7 @@ Test names say the behaviour in plain words (`testOversizedAnnouncementIsRefused
 
 ## Security rules (from the requirements)
 
-- The extension connects over TCP to Hotline's `listen.intercept` port. The address must be a loopback address (`CaptureAddress` refuses anything else, in the app and again in the extension), and the extension never hands over loopback connections. A socket file is also accepted, for testing, if its folder is owned by the user with mode 0700 (`CaptureTarget`). The Go proxy has the same rule and does not check who connects.
+- The extension connects over TCP to Hotline's `listen.intercept` port. The address must be a loopback address (`CaptureAddress` refuses anything else, in the app and again in the extension), and the extension never hands over loopback connections. A socket file, written `sock://` and its absolute path, is also accepted, for testing, if its folder is owned by the user with mode 0700 (`CaptureTarget`). The Go proxy has the same rule and does not check who connects.
 - Refuse any message with an unknown version or a size over `Framing.maxFrameSize`.
 - Never capture Hotline's own processes. The app list from the proxy always skips them.
 

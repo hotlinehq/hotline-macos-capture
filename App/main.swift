@@ -71,7 +71,7 @@ func startProxy(target: CaptureTarget) async throws {
 }
 
 // The only argument is where Hotline listens: the address of its intercept port, such as
-// 127.0.0.1:8444, or a socket file (an absolute path) for testing.
+// 127.0.0.1:8444, or a socket file for testing, as sock:// and an absolute path.
 guard CommandLine.arguments.count == 2 else {
     fail("This helper is started by Hotline and cannot be run on its own.")
 }
@@ -80,10 +80,12 @@ do {
     target = try CaptureTarget(parsing: CommandLine.arguments[1])
 } catch CaptureAddress.ParseError.notLoopback {
     fail("The address must be on this Mac only, such as 127.0.0.1:8444.")
+} catch CaptureTarget.ParseError.pathNotAbsolute {
+    fail("After sock:// the path of the socket file must start with a slash, as in sock:///tmp/capture/capture.sock.")
 } catch is CaptureTarget.SocketFolderError {
     fail("The folder of the socket file must exist, be owned by you and be closed to other users (mode 0700).")
 } catch {
-    fail("The argument must be an address and a port, such as 127.0.0.1:8444, or the path of a socket file.")
+    fail("The argument must be an address and a port, such as 127.0.0.1:8444, or sock:// and the path of a socket file.")
 }
 
 Task {

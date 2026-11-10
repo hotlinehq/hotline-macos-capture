@@ -20,14 +20,26 @@ final class CaptureTargetTests: XCTestCase {
             .tcp(try CaptureAddress(parsing: "127.0.0.1:8444")))
     }
 
-    func testPathStartingWithASlashInAPrivateFolderIsASocketFile() throws {
+    func testSockPrefixAndAPathInAPrivateFolderIsASocketFile() throws {
         let path = folder + "/capture.sock"
-        XCTAssertEqual(try CaptureTarget(parsing: path), .unix(path: path))
+        XCTAssertEqual(try CaptureTarget(parsing: "sock://" + path), .unix(path: path))
+    }
+
+    func testPathWithoutThePrefixIsNotASocketFile() {
+        XCTAssertThrowsError(try CaptureTarget(parsing: folder + "/capture.sock")) {
+            XCTAssertEqual($0 as? CaptureAddress.ParseError, .notHostAndPort)
+        }
+    }
+
+    func testRelativePathAfterThePrefixIsRefused() {
+        XCTAssertThrowsError(try CaptureTarget(parsing: "sock://capture.sock")) {
+            XCTAssertEqual($0 as? CaptureTarget.ParseError, .pathNotAbsolute)
+        }
     }
 
     func testTextIsWrittenBackAsGiven() throws {
         let path = folder + "/capture.sock"
-        XCTAssertEqual(try CaptureTarget(parsing: path).text, path)
+        XCTAssertEqual(try CaptureTarget(parsing: "sock://" + path).text, "sock://" + path)
         XCTAssertEqual(try CaptureTarget(parsing: "[::1]:9").text, "[::1]:9")
     }
 
@@ -39,13 +51,13 @@ final class CaptureTargetTests: XCTestCase {
 
     func testFolderOpenToOthersIsRefused() throws {
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder)
-        XCTAssertThrowsError(try CaptureTarget(parsing: folder + "/capture.sock")) {
+        XCTAssertThrowsError(try CaptureTarget(parsing: "sock://" + folder + "/capture.sock")) {
             XCTAssertEqual($0 as? CaptureTarget.SocketFolderError, .openToOthers)
         }
     }
 
     func testFolderThatIsNotThereIsRefused() {
-        XCTAssertThrowsError(try CaptureTarget(parsing: folder + "/gone/capture.sock")) {
+        XCTAssertThrowsError(try CaptureTarget(parsing: "sock://" + folder + "/gone/capture.sock")) {
             XCTAssertEqual($0 as? CaptureTarget.SocketFolderError, .missing)
         }
     }

@@ -3,10 +3,17 @@ import Foundation
 /// Where the extension connects to Hotline: a loopback address and port (the
 /// normal way, Hotline's `listen.intercept`), or a socket file, which is for
 /// testing with a stand-in listener. Written as one text: "127.0.0.1:8444",
-/// or an absolute path such as "/Users/me/capture/capture.sock".
+/// or "sock://" and an absolute path, such as "sock:///Users/me/capture/capture.sock".
 public enum CaptureTarget: Equatable {
     case tcp(CaptureAddress)
     case unix(path: String)
+
+    public enum ParseError: Error, Equatable {
+        /// After "sock://" comes a path that does not start with "/".
+        case pathNotAbsolute
+    }
+
+    static let socketPrefix = "sock://"
 
     public enum SocketFolderError: Error, Equatable {
         case missing
@@ -15,9 +22,11 @@ public enum CaptureTarget: Equatable {
     }
 
     public init(parsing text: String) throws {
-        if text.hasPrefix("/") {
-            try CaptureTarget.checkFolder(of: text, owner: getuid())
-            self = .unix(path: text)
+        if text.hasPrefix(CaptureTarget.socketPrefix) {
+            let path = String(text.dropFirst(CaptureTarget.socketPrefix.count))
+            guard path.hasPrefix("/") else { throw ParseError.pathNotAbsolute }
+            try CaptureTarget.checkFolder(of: path, owner: getuid())
+            self = .unix(path: path)
         } else {
             self = .tcp(try CaptureAddress(parsing: text))
         }
@@ -27,7 +36,7 @@ public enum CaptureTarget: Equatable {
     public var text: String {
         switch self {
         case .tcp(let address): return address.text
-        case .unix(let path): return path
+        case .unix(let path): return CaptureTarget.socketPrefix + path
         }
     }
 
