@@ -6,7 +6,7 @@ This is the contract between this app and the Hotline proxy (Go, in `petercipov/
 
 Hotline creates one Unix socket (a local file-like channel) in a private folder: made by Hotline with a random name, mode 0700, owned by the user. The path is passed to the helper app as its only argument and stored in the proxy setting, so the extension gets it from macOS.
 
-Hotline must check who connects (peer user): only the same user or root. Anything else is refused.
+At start, Hotline checks that the folder is owned by the current user and has mode 0700, and refuses to start otherwise. It does not check who connects: the private folder keeps other users out, and programs of the same user are trusted.
 
 ## Framing
 
