@@ -31,8 +31,23 @@ jobs:
       - name: Generate the Xcode project
         run: xcodegen
 
+      - name: XcodeGen must not change our plist and entitlements files
+        run: git diff --exit-code -- App Extension
+
       - name: Build the app and the extension without signing
         run: |
           xcodebuild -scheme HotlineCapture -configuration Release \
             -destination 'generic/platform=macOS' \
             CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" build
+
+      - name: The built extension and app keep their Info.plist keys
+        run: |
+          set -eu
+          products=$(xcodebuild -scheme HotlineCapture -configuration Release -destination 'generic/platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGN_IDENTITY="" -showBuildSettings 2>/dev/null \
+            | awk '/^ *BUILT_PRODUCTS_DIR =/ {print $3; exit}')
+          app="$products/Hotline Capture.app"
+          extension="$app/Contents/Library/SystemExtensions/io.github.petercipov.hotlinecapture.extension.systemextension"
+          /usr/libexec/PlistBuddy -c "Print :NSSystemExtensionUsageDescription" "$extension/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :NetworkExtension:NEProviderClasses" "$extension/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :LSUIElement" "$app/Contents/Info.plist"

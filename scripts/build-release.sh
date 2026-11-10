@@ -55,6 +55,21 @@ xcodebuild -exportArchive -archivePath build/HotlineCapture.xcarchive \
   -exportOptionsPlist build/ExportOptions.plist -exportPath build
 
 APP="build/Hotline Capture.app"
+EXTENSION="$APP/Contents/Library/SystemExtensions/io.github.petercipov.hotlinecapture.extension.systemextension"
+
+# Stop before notarizing if the signed app lacks what macOS needs to install the extension.
+# The first release shipped with none of these and macOS refused it.
+codesign -d --entitlements :- "$APP" 2>/dev/null | grep -q "com.apple.developer.system-extension.install" \
+  || { echo "The signed app has no system-extension.install entitlement." >&2; exit 1; }
+codesign -d --entitlements :- "$EXTENSION" 2>/dev/null | grep -q "app-proxy-provider-systemextension" \
+  || { echo "The signed extension has no app-proxy-provider-systemextension entitlement." >&2; exit 1; }
+/usr/libexec/PlistBuddy -c "Print :NetworkExtension:NEProviderClasses" "$EXTENSION/Contents/Info.plist" >/dev/null \
+  || { echo "The extension's Info.plist has no NetworkExtension keys." >&2; exit 1; }
+/usr/libexec/PlistBuddy -c "Print :NSSystemExtensionUsageDescription" "$EXTENSION/Contents/Info.plist" >/dev/null \
+  || { echo "The extension's Info.plist has no usage description." >&2; exit 1; }
+[ "$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")" = "$VERSION" ] \
+  || { echo "The app's version is not $VERSION." >&2; exit 1; }
+
 ditto -c -k --keepParent "$APP" build/HotlineCapture.zip
 xcrun notarytool submit build/HotlineCapture.zip \
   --apple-id "$APPLE_ID" --team-id "$DEVELOPMENT_TEAM" --password "$APPLE_APP_PASSWORD" --wait
