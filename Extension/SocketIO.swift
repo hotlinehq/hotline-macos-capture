@@ -20,6 +20,12 @@ extension NWConnection {
                 case .failed(let error):
                     finished = true
                     continuation.resume(throwing: error)
+                case .waiting(let error):
+                    // Hotline is not listening (connection refused). Network keeps retrying a
+                    // waiting connection and would never report a failure, so give up now.
+                    finished = true
+                    self.cancel()
+                    continuation.resume(throwing: error)
                 case .cancelled:
                     finished = true
                     continuation.resume(throwing: SocketError.closed)
