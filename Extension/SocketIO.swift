@@ -1,5 +1,7 @@
+import CaptureCore
 import Foundation
 import Network
+import NetworkExtension
 
 /// Small helpers around NWConnection for the connections to Hotline.
 enum SocketError: Error {
@@ -61,6 +63,33 @@ extension NWConnection {
                     continuation.resume(returning: nil)
                 } else {
                     continuation.resume(returning: Data())
+                }
+            }
+        }
+    }
+
+    /// Reads Hotline's answer to the CONNECT and returns the bytes that came
+    /// after it, which belong to the app. Throws when Hotline refuses or
+    /// closes first.
+    func readConnectReply() async throws -> Data {
+        var reply = ConnectReply()
+        while true {
+            guard let bytes = try await receiveBytes() else { throw SocketError.closed }
+            if let rest = try reply.append(bytes) {
+                return rest
+            }
+        }
+    }
+}
+
+extension NEAppProxyTCPFlow {
+    func writeBytes(_ data: Data) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            self.write(data) { error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    continuation.resume()
                 }
             }
         }
