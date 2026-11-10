@@ -22,7 +22,7 @@ import socketserver
 import sys
 
 MAX_REPLY = 8 * 1024
-VERSION = "1"
+VERSION = "2"
 
 
 class Handler(socketserver.BaseRequestHandler):
@@ -59,8 +59,13 @@ class Handler(socketserver.BaseRequestHandler):
             sock.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
             return
         print(
-            "captured: %s from process %s %s"
-            % (target, headers.get("hotline-capture-pid"), headers.get("hotline-capture-program", "(no path)"))
+            "captured: %s from process %s %s (sent by %s)"
+            % (
+                target,
+                headers.get("hotline-capture-pid"),
+                headers.get("hotline-capture-program", "(no path)"),
+                headers.get("user-agent", "no User-Agent"),
+            )
         )
         sock.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
         first = rest[:1]
