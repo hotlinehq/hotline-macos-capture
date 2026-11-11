@@ -1,5 +1,7 @@
 # hotline-macos-capture
 
+<img src="docs/logo.png" alt="Hotline Capture logo" width="128">
+
 Sends the secure calls of chosen apps on a Mac to a local [Hotline](https://github.com/petercipov/hotline) proxy. A small Swift app installs a macOS system extension (a program macOS runs for the Mac's network traffic). The extension finds which program made each connection and, if the program is on the app list, hands the connection to Hotline's proxy port on this Mac as a standard HTTP CONNECT.
 
 Apple Silicon only, macOS 13 or newer.
