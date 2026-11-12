@@ -4,8 +4,8 @@
 It listens on a socket file like Hotline's listen.capture does, for the
 extension's CONNECT requests only (docs/protocol.md): it prints each captured
 connection (where the app really called, which program it was, and the user
-macOS says opened the socket file), answers 200 when that user is root, as
-the extension runs, and 403 otherwise, reads the
+macOS says opened the socket file, 0 for the extension, which runs as root),
+answers 200, reads the
 app's first byte, then closes it. Connections that send nothing are the
 extension's checks that Hotline is there, and are not printed. It needs only
 Python 3.9 or newer, which macOS brings with its developer tools. No libraries.
@@ -87,10 +87,6 @@ class Handler(socketserver.BaseRequestHandler):
                 headers.get("user-agent", "no User-Agent"),
             )
         )
-        if user != 0:
-            print("  refused: only root, as the extension runs, is believed")
-            sock.sendall(b"HTTP/1.1 403 Forbidden\r\n\r\n")
-            return
         sock.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
         first = rest[:1]
         if not first:

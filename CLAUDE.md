@@ -41,7 +41,7 @@ Test names say the behaviour in plain words (`testOversizedAnnouncementIsRefused
 
 ## Security rules (from the requirements)
 
-- The extension connects to Hotline's socket file and sends a CONNECT with the capture headers. The path must be absolute and at most 103 bytes (`CapturePath` refuses anything else, in the app and again in the extension). Hotline believes the capture headers only on that socket file, and only from root, as the extension runs; on its proxy port they are ignored (Peter, 2026-11-12). The extension still never hands over loopback connections, to leave local services alone.
+- The extension connects to Hotline's socket file and sends a CONNECT with the capture headers. The path must be absolute and at most 103 bytes (`CapturePath` refuses anything else, in the app and again in the extension). Hotline believes the capture headers only on that socket file, which only Hotline's user and root, as the extension runs, can open; on its proxy port they are ignored (Peter, 2026-11-12). The extension still never hands over loopback connections, to leave local services alone.
 - A header value never holds a control character, and a reply over `ConnectReply.maxSize` or not HTTP closes the connection.
 - Never capture Hotline's own processes. The helper always adds its caller, Hotline, as a skip rule.
 - When Hotline does not answer the 2-second check, capture nothing, so apps keep working.
