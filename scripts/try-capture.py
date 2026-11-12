@@ -1,28 +1,46 @@
 #!/usr/bin/env python3
 """A stand-in for Hotline, to try the extension by hand on a Mac.
 
-It listens like Hotline's proxy port does, for the extension's CONNECT
-requests only (docs/protocol.md): it prints each captured connection (where
-the app really called and which program it was), answers 200, reads the
+It listens on a socket file like Hotline's listen.capture does, for the
+extension's CONNECT requests only (docs/protocol.md): it prints each captured
+connection (where the app really called, which program it was, and the user
+macOS says opened the socket file), answers 200 when that user is root, as
+the extension runs, and 403 otherwise, reads the
 app's first byte, then closes it. Connections that send nothing are the
 extension's checks that Hotline is there, and are not printed. It needs only
 Python 3.9 or newer, which macOS brings with its developer tools. No libraries.
 
-    python3 scripts/try-capture.py                        # 127.0.0.1:8080
-    python3 scripts/try-capture.py --listen 127.0.0.1:9000
+    python3 scripts/try-capture.py                        # /tmp/hotline-capture.sock
+    python3 scripts/try-capture.py --listen /tmp/other.sock
 
-Then start capture with the same address and the apps to capture:
+Then start capture with the same path and the apps to capture:
 
-    "/Applications/Hotline Capture.app/Contents/MacOS/Hotline Capture" 127.0.0.1:8080 curl
+    "/Applications/Hotline Capture.app/Contents/MacOS/Hotline Capture" /tmp/hotline-capture.sock curl
 """
 
 import argparse
+import os
 import socket
 import socketserver
+import struct
 import sys
 
 MAX_REPLY = 8 * 1024
-VERSION = "1"
+VERSION = "2"
+# macOS: getsockopt(SOL_LOCAL, LOCAL_PEERCRED) gives the user of the
+# program on the other end of a socket file.
+SOL_LOCAL = 0
+LOCAL_PEERCRED = 1
+
+
+def peer_user(sock):
+    """The user of the program on the other end, or None when not known."""
+    try:
+        cred = sock.getsockopt(SOL_LOCAL, LOCAL_PEERCRED, 64)
+        _version, uid = struct.unpack_from("II", cred)
+        return uid
+    except OSError:
+        return None
 
 
 class Handler(socketserver.BaseRequestHandler):
@@ -58,15 +76,21 @@ class Handler(socketserver.BaseRequestHandler):
             print("refused: Hotline-Capture is %r, want %s" % (headers.get("hotline-capture"), VERSION))
             sock.sendall(b"HTTP/1.1 400 Bad Request\r\n\r\n")
             return
+        user = peer_user(sock)
         print(
-            "captured: %s from process %s %s (sent by %s)"
+            "captured: %s from process %s %s (user %s, sent by %s)"
             % (
                 target,
                 headers.get("hotline-capture-pid"),
                 headers.get("hotline-capture-program", "(no path)"),
+                user,
                 headers.get("user-agent", "no User-Agent"),
             )
         )
+        if user != 0:
+            print("  refused: only root, as the extension runs, is believed")
+            sock.sendall(b"HTTP/1.1 403 Forbidden\r\n\r\n")
+            return
         sock.sendall(b"HTTP/1.1 200 Connection established\r\n\r\n")
         first = rest[:1]
         if not first:
@@ -83,23 +107,22 @@ class Handler(socketserver.BaseRequestHandler):
         # Hotline would pose as the vendor here. The stand-in just ends the connection.
 
 
-class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
-    allow_reuse_address = True
+class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
     daemon_threads = True
 
 
 def main():
     parser = argparse.ArgumentParser(description="A stand-in for Hotline, to try the extension by hand.")
-    parser.add_argument("--listen", default="127.0.0.1:8080", help="an address on this Mac, such as 127.0.0.1:8080")
+    parser.add_argument("--listen", default="/tmp/hotline-capture.sock", help="the socket file, such as /tmp/hotline-capture.sock")
     args = parser.parse_args()
 
-    host, _, port = args.listen.rpartition(":")
-    host = host.strip("[]")
-    if host not in ("127.0.0.1", "::1", "localhost") and not host.startswith("127."):
-        sys.exit("the address must be on this Mac only, such as 127.0.0.1:8080")
-    if ":" in host:
-        Server.address_family = socket.AF_INET6
-    server = Server((host, int(port)), Handler)
+    if not args.listen.startswith("/") or len(args.listen.encode()) > 103:
+        sys.exit("the path must start with / and be at most 103 bytes, such as /tmp/hotline-capture.sock")
+    # A socket file left by an earlier run would stop the listen.
+    if os.path.exists(args.listen):
+        os.remove(args.listen)
+    server = Server(args.listen, Handler)
+    os.chmod(args.listen, 0o600)
 
     print("listening on %s; stop with Ctrl-C" % args.listen)
     print('start capture with: "/Applications/Hotline Capture.app/Contents/MacOS/Hotline Capture" %s curl' % args.listen)
@@ -109,6 +132,7 @@ def main():
         pass
     finally:
         server.server_close()
+        os.remove(args.listen)
 
 
 if __name__ == "__main__":

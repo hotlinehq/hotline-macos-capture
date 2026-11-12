@@ -13,9 +13,9 @@ settings:
     SWIFT_VERSION: "5.9"
     # Set your Apple team id here or pass DEVELOPMENT_TEAM=... to xcodebuild.
     DEVELOPMENT_TEAM: ""
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "0.2.0"
     # Raise this on EVERY change to the extension, or macOS keeps the old one.
-    CURRENT_PROJECT_VERSION: "2"
+    CURRENT_PROJECT_VERSION: "3"
 packages:
   HotlineCapture:
     path: .

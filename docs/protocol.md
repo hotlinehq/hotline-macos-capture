@@ -1,27 +1,27 @@
-# How the extension talks to Hotline (capture version 1)
+# How the extension talks to Hotline (capture version 2)
 
-This is the contract between this app and the Hotline proxy (Go, in `petercipov/hotline`). It is plain HTTP: a CONNECT request with a `User-Agent` and three headers of ours. Change this file together with `Sources/CaptureCore/ConnectRequest.swift`, and raise `ConnectRequest.captureVersion` when a header changes.
+This is the contract between this app and the Hotline proxy (Go, in `petercipov/hotline`). It is plain HTTP: a CONNECT request with a `User-Agent` and three headers of ours. Change this file together with `Sources/CaptureCore/ConnectRequest.swift`, and raise `ConnectRequest.captureVersion` when a header, or the way it reaches Hotline, changes. Version 2 (2026-11-12) moved the CONNECT from Hotline's proxy port to a socket file; the headers are the same as in version 1.
 
 ## Starting and stopping
 
 Hotline runs the helper app:
 
-- `Hotline Capture <address> <app>...` starts capture, for example `Hotline Capture 127.0.0.1:8080 curl firefox`. `<address>` is Hotline's proxy port (`listen.proxy`), on this Mac. Each app is a piece of a program path or a process number; a leading `!` skips it. When the first entry is a skip rule, everything else is captured. The helper adds a skip rule for its caller, Hotline, so Hotline's own calls are never captured.
+- `Hotline Capture <path> <app>...` starts capture, for example `Hotline Capture "/Users/me/Library/Application Support/Hotline/capture.sock" curl firefox`. `<path>` is Hotline's socket file for captured connections (`listen.capture`; a socket file is a connection point in the file system that only programs on this Mac can open). Each app is a piece of a program path or a process number; a leading `!` skips it. When the first entry is a skip rule, everything else is captured. The helper adds a skip rule for its caller, Hotline, so Hotline's own calls are never captured.
 - `Hotline Capture --stop` switches capture off. The extension stays installed.
 
-The helper stores the address and the app list in the macOS proxy setting, where the extension reads them when it starts. A new list is a new start: the helper switches capture off and on again, which needs no new approval.
+The helper stores the path and the app list in the macOS proxy setting, where the extension reads them when it starts. A new list is a new start: the helper switches capture off and on again, which needs no new approval.
 
-The address must be a loopback address (`127.x.x.x`, `::1` in brackets, or `localhost`). The helper and the extension refuse anything else. The extension never hands over connections to loopback addresses, so its own connections to Hotline are never captured, and a captured app's calls to services on this Mac are not captured either.
+The path must start with `/`, be at most 103 bytes (the longest path macOS keeps for a socket file) and hold no control character. The helper and the extension refuse anything else. The extension never hands over connections to loopback addresses, so a captured app's calls to services on this Mac are not captured. Its own connections to Hotline go over the socket file, which macOS never hands over.
 
 ## One captured connection
 
-For each new TCP connection of a listed app, the extension connects to the address and sends:
+For each new TCP connection of a listed app, the extension connects to the socket file and sends:
 
 ```
 CONNECT 93.184.215.14:443 HTTP/1.1
 Host: 93.184.215.14:443
 User-Agent: HotlineCapture/0.1.1
-Hotline-Capture: 1
+Hotline-Capture: 2
 Hotline-Capture-Pid: 4242
 Hotline-Capture-Program: /usr/bin/curl
 ```
@@ -34,8 +34,8 @@ Hotline-Capture-Program: /usr/bin/curl
 
 Hotline answers like any HTTP proxy. A `2xx` status line and headers, ended by an empty line, open the tunnel: after it, both sides send the raw bytes of the app's connection, and either side closing ends it. Any other status, a reply that is not HTTP/1.0 or HTTP/1.1, or a reply over 8 KiB closes the app's connection.
 
-Hotline believes the capture headers only when the CONNECT comes from a loopback address. A CONNECT from anywhere else is treated as an ordinary one.
+Hotline believes the capture headers only on its socket file, and only when macOS says the program on the other end runs as root, as the extension does. Any other user gets `403`, and a request other than CONNECT gets `405`. On Hotline's proxy port the capture headers are ignored. Hotline refuses version 1 with `400`, as any version it does not know.
 
 ## Checking that Hotline is there
 
-macOS wants the answer "capture or not" at once, when a connection starts. So the extension checks Hotline in the background: every 2 seconds it opens a TCP connection to the address and closes it, sending nothing. While the last check failed, it captures nothing and every app goes out as usual. When it starts, the extension makes the same check and refuses to start if it fails.
+macOS wants the answer "capture or not" at once, when a connection starts. So the extension checks Hotline in the background: every 2 seconds it opens a connection to the socket file and closes it, sending nothing. While the last check failed, it captures nothing and every app goes out as usual. When it starts, the extension makes the same check and refuses to start if it fails.

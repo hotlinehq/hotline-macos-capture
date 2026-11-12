@@ -69,16 +69,16 @@ func stopCapture(_ manager: NETransparentProxyManager) async {
     }
 }
 
-/// Saves the proxy setting, with Hotline's address and this run's app list
+/// Saves the proxy setting, with Hotline's socket file and this run's app list
 /// inside it, and switches capture on. Capture that is already on is
 /// switched off first, so the extension reads the new list.
-func startCapture(address: CaptureAddress, apps: [String]) async throws {
+func startCapture(path: CapturePath, apps: [String]) async throws {
     let manager = try await loadManager() ?? NETransparentProxyManager()
     await stopCapture(manager)
 
     let provider = NETunnelProviderProtocol()
     provider.providerBundleIdentifier = extensionIdentifier
-    provider.serverAddress = address.text
+    provider.serverAddress = path.text
     provider.providerConfiguration = HelperCommand.setting(apps: apps)
     manager.protocolConfiguration = provider
     manager.localizedDescription = "Hotline Capture"
@@ -100,7 +100,7 @@ func startCapture(address: CaptureAddress, apps: [String]) async throws {
         try? await Task.sleep(nanoseconds: 100_000_000)
     }
     guard manager.connection.status == .connected else {
-        throw CaptureError.notStarted(address.text)
+        throw CaptureError.notStarted(path.text)
     }
 }
 
@@ -109,8 +109,8 @@ enum CaptureError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notStarted(let address):
-            return "the extension did not start. Is Hotline listening on \(address)? "
+        case .notStarted(let path):
+            return "the extension did not start. Is Hotline listening on \(path)? "
                 + "Details: log show --last 1m --predicate 'subsystem == \"io.github.petercipov.hotlinecapture\"'"
         }
     }
@@ -124,25 +124,30 @@ func stopCapture() async throws {
     try await manager.saveToPreferences()
 }
 
-// Hotline starts this helper with its proxy address and the apps to capture, such as
-// 127.0.0.1:8080 curl firefox, and with --stop when it stops.
+// Hotline starts this helper with its socket file for captured connections and the apps
+// to capture, such as "/Users/me/Library/Application Support/Hotline/capture.sock" curl
+// firefox, and with --stop when it stops.
 let command: HelperCommand
 do {
     command = try HelperCommand(arguments: Array(CommandLine.arguments.dropFirst()), callerPID: getppid())
-} catch CaptureAddress.ParseError.notLoopback {
-    fail("The address must be on this Mac only, such as 127.0.0.1:8080.")
+} catch CapturePath.ParseError.notAbsolute {
+    fail("Give the full path of Hotline's socket file, starting with /, such as /tmp/capture.sock.")
+} catch CapturePath.ParseError.tooLong {
+    fail("The path of Hotline's socket file is longer than \(CapturePath.maxBytes) bytes.")
+} catch CapturePath.ParseError.controlCharacter {
+    fail("The path of Hotline's socket file holds a control character.")
 } catch HelperCommand.UsageError.noApps {
-    fail("Name at least one app to capture after the address, such as 127.0.0.1:8080 curl.")
+    fail("Name at least one app to capture after the path, such as /tmp/capture.sock curl.")
 } catch {
-    fail("Give Hotline's address and the apps to capture, such as 127.0.0.1:8080 curl, or --stop.")
+    fail("Give Hotline's socket file and the apps to capture, such as /tmp/capture.sock curl, or --stop.")
 }
 
 Task {
     do {
         switch command {
-        case .start(let address, let apps):
+        case .start(let path, let apps):
             try await Installer.run()
-            try await startCapture(address: address, apps: apps)
+            try await startCapture(path: path, apps: apps)
         case .stop:
             try await stopCapture()
         }

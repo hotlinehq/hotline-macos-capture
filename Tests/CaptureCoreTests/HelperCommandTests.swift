@@ -2,11 +2,11 @@ import XCTest
 @testable import CaptureCore
 
 final class HelperCommandTests: XCTestCase {
-    func testAddressAndAppsStartCaptureWithTheCallerSkipped() throws {
-        let command = try HelperCommand(arguments: ["127.0.0.1:8080", "curl", "firefox"], callerPID: 55)
+    func testPathAndAppsStartCaptureWithTheCallerSkipped() throws {
+        let command = try HelperCommand(arguments: ["/tmp/capture.sock", "curl", "firefox"], callerPID: 55)
         XCTAssertEqual(
             command,
-            .start(address: try CaptureAddress(parsing: "127.0.0.1:8080"), apps: ["curl", "firefox", "!55"]))
+            .start(path: try CapturePath(parsing: "/tmp/capture.sock"), apps: ["curl", "firefox", "!55"]))
     }
 
     func testStopNeedsNothingElse() throws {
@@ -19,14 +19,14 @@ final class HelperCommandTests: XCTestCase {
         }
     }
 
-    func testAddressWithoutAppsIsRefused() {
-        XCTAssertThrowsError(try HelperCommand(arguments: ["127.0.0.1:8080"], callerPID: 55)) {
+    func testPathWithoutAppsIsRefused() {
+        XCTAssertThrowsError(try HelperCommand(arguments: ["/tmp/capture.sock"], callerPID: 55)) {
             XCTAssertEqual($0 as? HelperCommand.UsageError, .noApps)
         }
     }
 
     func testBlankAppsCountAsNone() {
-        XCTAssertThrowsError(try HelperCommand(arguments: ["127.0.0.1:8080", " ", "!"], callerPID: 55)) {
+        XCTAssertThrowsError(try HelperCommand(arguments: ["/tmp/capture.sock", " ", "!"], callerPID: 55)) {
             XCTAssertEqual($0 as? HelperCommand.UsageError, .noApps)
         }
     }
@@ -37,9 +37,9 @@ final class HelperCommandTests: XCTestCase {
         }
     }
 
-    func testAddressOffThisMacIsRefused() {
-        XCTAssertThrowsError(try HelperCommand(arguments: ["10.0.0.1:8080", "curl"], callerPID: 55)) {
-            XCTAssertEqual($0 as? CaptureAddress.ParseError, .notLoopback)
+    func testAddressInPlaceOfAPathIsRefused() {
+        XCTAssertThrowsError(try HelperCommand(arguments: ["127.0.0.1:8080", "curl"], callerPID: 55)) {
+            XCTAssertEqual($0 as? CapturePath.ParseError, .notAbsolute)
         }
     }
 
