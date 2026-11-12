@@ -34,7 +34,7 @@ Hotline-Capture-Program: /usr/bin/curl
 
 Hotline answers like any HTTP proxy. A `2xx` status line and headers, ended by an empty line, open the tunnel: after it, both sides send the raw bytes of the app's connection, and either side closing ends it. Any other status, a reply that is not HTTP/1.0 or HTTP/1.1, or a reply over 8 KiB closes the app's connection.
 
-Hotline believes the capture headers only on its socket file, and only when macOS says the program on the other end runs as root, as the extension does. Any other user gets `403`, and a request other than CONNECT gets `405`. On Hotline's proxy port the capture headers are ignored. Hotline refuses version 1 with `400`, as any version it does not know.
+Hotline believes the capture headers only on its socket file. Only Hotline's own user and root can open that file, and the extension runs as root (Peter, 2026-11-12). A request other than CONNECT gets `405`. On Hotline's proxy port the capture headers are ignored. Hotline refuses version 1 with `400`, as any version it does not know.
 
 ## Checking that Hotline is there
 

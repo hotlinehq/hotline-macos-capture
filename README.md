@@ -16,7 +16,7 @@ Hotline (a Go proxy, in [petercipov/hotline](https://github.com/petercipov/hotli
 4. Every 2 seconds the extension checks that Hotline still answers. If it does not, apps go out as usual.
 5. When Hotline stops, it runs the helper app with `--stop`. The extension stays installed.
 
-The helper app and the extension refuse a path that is not absolute or is too long for a socket file. Hotline believes the capture headers only from the extension, which runs as root. The exact requests are in `docs/protocol.md`.
+The helper app and the extension refuse a path that is not absolute or is too long for a socket file. Hotline believes the capture headers only on its socket file, which only Hotline's user and root, as the extension runs, can open. The exact requests are in `docs/protocol.md`.
 
 ## Status
 
@@ -75,7 +75,7 @@ Set your Apple team id in `project.yml` (or pass `DEVELOPMENT_TEAM`). Signing an
 1. `swift test` passes and coverage of `CaptureCore` is at least 90 percent.
 2. The helper refuses no arguments, a path without apps, and an address in place of a path (for example `127.0.0.1:8080`).
 3. Without the stand-in running, starting capture fails with a message naming the path, and nothing is captured.
-4. With the stand-in: `curl` shows up with the right destination, process number and program, from user 0. Another app does not. A CONNECT sent by hand to the socket file, for example with `nc -U /tmp/hotline-capture.sock`, shows a user other than 0 and is refused with 403.
+4. With the stand-in: `curl` shows up with the right destination, process number and program, from user 0. Another app does not. The socket file can be opened only by your user and root (`ls -l /tmp/hotline-capture.sock` shows `srw-------`).
 5. Starting again with another list (for example `firefox`) captures the new app and no longer `curl`, with no second approval.
 6. With the stand-in stopped, `curl` works again within 2 seconds.
 7. `--stop` switches capture off and leaves the extension installed.

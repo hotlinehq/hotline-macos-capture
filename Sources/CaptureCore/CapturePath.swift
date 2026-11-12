@@ -3,8 +3,8 @@ import Foundation
 /// The socket file Hotline listens on for captured connections (its
 /// `listen.capture` setting), which the extension connects to. A socket
 /// file is a connection point in the file system: only programs on this
-/// Mac can reach it, and Hotline can ask macOS which user opened it, so it
-/// believes the capture headers only from the extension, which runs as root.
+/// Mac can reach it, and only Hotline's own user and root, as the extension
+/// runs, can open it, so Hotline believes the capture headers there.
 public struct CapturePath: Equatable {
     public enum ParseError: Error, Equatable {
         case notAbsolute
