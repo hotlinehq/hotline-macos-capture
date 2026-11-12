@@ -14,7 +14,7 @@ final class ConnectRequestTests: XCTestCase {
             "CONNECT 93.184.215.14:443 HTTP/1.1\r\n"
                 + "Host: 93.184.215.14:443\r\n"
                 + "User-Agent: HotlineCapture/0.1.1\r\n"
-                + "Hotline-Capture: 1\r\n"
+                + "Hotline-Capture: 2\r\n"
                 + "Hotline-Capture-Pid: 4242\r\n"
                 + "Hotline-Capture-Program: /usr/bin/curl\r\n"
                 + "\r\n")

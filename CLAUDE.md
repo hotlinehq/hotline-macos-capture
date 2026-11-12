@@ -1,6 +1,6 @@
 # Hotline Capture (macOS)
 
-A small Swift app with a system extension (a program macOS runs for the Mac's network traffic) that picks out the secure calls of chosen apps and hands them to the Hotline proxy's port on this Mac as a standard HTTP CONNECT. The Hotline proxy itself lives in `petercipov/hotline` and is written in Go. Requirements: `mitmproxy-ideas/wrap-command-requirements.md` in the Hotline project files (decided points are marked there).
+A small Swift app with a system extension (a program macOS runs for the Mac's network traffic) that picks out the secure calls of chosen apps and hands them to the Hotline proxy's socket file on this Mac (its `listen.capture`) as a standard HTTP CONNECT. The Hotline proxy itself lives in `petercipov/hotline` and is written in Go. Requirements: `mitmproxy-ideas/wrap-command-requirements.md` in the Hotline project files (decided points are marked there).
 
 ## Working rules
 
@@ -12,7 +12,7 @@ A small Swift app with a system extension (a program macOS runs for the Mac's ne
 
 - Apple Silicon only, macOS 13 or newer. No Intel build.
 - No third-party dependencies. Foundation, Network and NetworkExtension only. This keeps the app small and the signing simple.
-- `Sources/CaptureCore`: everything that needs no macOS network APIs (the app list, the CONNECT request and reply, the helper's arguments, the address check). All logic goes here.
+- `Sources/CaptureCore`: everything that needs no macOS network APIs (the app list, the CONNECT request and reply, the helper's arguments, the socket path check). All logic goes here.
 - `Extension/` and `App/`: thin layers. They only call macOS APIs and `CaptureCore`. If code in them grows a decision, move the decision into `CaptureCore` and test it there.
 - `docs/protocol.md` is the contract with the Go proxy. Change it together with `ConnectRequest.swift` and raise `ConnectRequest.captureVersion` when a header changes.
 
@@ -41,7 +41,7 @@ Test names say the behaviour in plain words (`testOversizedAnnouncementIsRefused
 
 ## Security rules (from the requirements)
 
-- The extension connects over TCP to Hotline's proxy port and sends a CONNECT with the capture headers. The address must be a loopback address (`CaptureAddress` refuses anything else, in the app and again in the extension), and the extension never hands over loopback connections. Hotline believes the capture headers only from a loopback address.
+- The extension connects to Hotline's socket file and sends a CONNECT with the capture headers. The path must be absolute and at most 103 bytes (`CapturePath` refuses anything else, in the app and again in the extension). Hotline believes the capture headers only on that socket file, and only from root, as the extension runs; on its proxy port they are ignored (Peter, 2026-11-12). The extension still never hands over loopback connections, to leave local services alone.
 - A header value never holds a control character, and a reply over `ConnectReply.maxSize` or not HTTP closes the connection.
 - Never capture Hotline's own processes. The helper always adds its caller, Hotline, as a skip rule.
 - When Hotline does not answer the 2-second check, capture nothing, so apps keep working.
@@ -54,4 +54,4 @@ Test names say the behaviour in plain words (`testOversizedAnnouncementIsRefused
 
 ## Not verified yet
 
-Release v0.1.1 ran on a real Mac with the earlier message format. The CONNECT version has not: treat its first run there, with the checklist in `README.md`, as its first real test.
+Release v0.1.1 ran on a real Mac with the earlier message format. The CONNECT version, and capture version 2 over the socket file, have not: treat their first run there, with the checklist in `README.md`, as their first real test.

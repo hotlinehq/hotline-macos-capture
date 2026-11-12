@@ -2,12 +2,12 @@ import Foundation
 
 /// What Hotline asks the helper app to do, read from its arguments:
 ///
-/// - `<address> <app>...` starts capture of the apps, with Hotline's proxy
-///   port at the address. The caller (Hotline) is always added as a skip
+/// - `<path> <app>...` starts capture of the apps, with Hotline's socket
+///   file for captured connections at the path. The caller (Hotline) is always added as a skip
 ///   rule, so its own calls to vendors are never captured.
 /// - `--stop` switches capture off.
 public enum HelperCommand: Equatable {
-    case start(address: CaptureAddress, apps: [String])
+    case start(path: CapturePath, apps: [String])
     case stop
 
     public enum UsageError: Error, Equatable {
@@ -25,10 +25,10 @@ public enum HelperCommand: Equatable {
             self = .stop
             return
         }
-        let address = try CaptureAddress(parsing: first)
+        let path = try CapturePath(parsing: first)
         let apps = arguments.dropFirst().filter { SpecAction($0) != nil }
         guard !apps.isEmpty else { throw UsageError.noApps }
-        self = .start(address: address, apps: apps + ["!\(callerPID)"])
+        self = .start(path: path, apps: apps + ["!\(callerPID)"])
     }
 
     /// The app list as it is kept in the proxy setting.

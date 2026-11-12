@@ -7,8 +7,8 @@ import OSLog
 let log = Logger(subsystem: "io.github.petercipov.hotlinecapture", category: "extension")
 
 enum ProviderError: Error {
-    case addressMissing
-    case addressRefused(String)
+    case pathMissing
+    case pathRefused(String)
     case noApps
 }
 
@@ -16,19 +16,19 @@ enum ProviderError: Error {
 /// It only decides "capture or not" and copies bytes. It never reads or
 /// changes what is inside a connection.
 class TransparentProxyProvider: NETransparentProxyProvider {
-    private var address: CaptureAddress?
+    private var path: CapturePath?
     private var spec = InterceptSpec(parsing: [])  // empty: capture nothing
     private var watch: HotlineWatch?
 
-    /// A TCP connection to Hotline's proxy port.
     /// The release version, read from the extension's own Info.plist, for the User-Agent.
     static let appVersion =
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
 
-    static func connection(to address: CaptureAddress) -> NWConnection {
-        NWConnection(
-            host: NWEndpoint.Host(address.host), port: NWEndpoint.Port(rawValue: address.port)!,
-            using: .tcp)
+    /// A connection to Hotline's socket file for captured connections. A
+    /// socket file carries a byte stream like TCP, so the TCP parameters
+    /// apply.
+    static func connection(to path: CapturePath) -> NWConnection {
+        NWConnection(to: .unix(path: path.text), using: .tcp)
     }
 
     // MARK: Start and stop
@@ -37,28 +37,28 @@ class TransparentProxyProvider: NETransparentProxyProvider {
         guard let configuration = protocolConfiguration as? NETunnelProviderProtocol,
             let text = configuration.serverAddress
         else {
-            throw ProviderError.addressMissing
+            throw ProviderError.pathMissing
         }
         // The app already checked this; check again, since the setting could have been changed.
-        let address: CaptureAddress
+        let path: CapturePath
         do {
-            address = try CaptureAddress(parsing: text)
+            path = try CapturePath(parsing: text)
         } catch {
-            throw ProviderError.addressRefused(text)
+            throw ProviderError.pathRefused(text)
         }
         // The app list for this run, written by the helper app. It is read only here:
         // a new list means a restart of capture.
         let spec = InterceptSpec(
             parsing: HelperCommand.apps(fromSetting: configuration.providerConfiguration))
         guard !spec.actions.isEmpty else { throw ProviderError.noApps }
-        self.address = address
+        self.path = path
         self.spec = spec
 
         // Fail now, with a clear error for the helper app, when Hotline is not listening.
-        let probe = Self.connection(to: address)
+        let probe = Self.connection(to: path)
         try await probe.establish()
         probe.cancel()
-        let watch = HotlineWatch(address: address)
+        let watch = HotlineWatch(path: path)
         watch.start()
         self.watch = watch
 
@@ -69,8 +69,8 @@ class TransparentProxyProvider: NETransparentProxyProvider {
                 remoteNetwork: nil, remotePrefix: 0, localNetwork: nil, localPrefix: 0,
                 protocol: .any, direction: .outbound)
         ]
-        // Never hand over connections to this Mac itself: that includes our own connections to
-        // Hotline, which would otherwise loop when everything is captured.
+        // Never hand over connections to this Mac itself, so local services are left alone.
+        // Our own connections to Hotline go over its socket file, which macOS never hands over.
         settings.excludedNetworkRules = [
             NENetworkRule(
                 remoteNetwork: NWHostEndpoint(hostname: "127.0.0.0", port: "0"), remotePrefix: 8,
@@ -92,7 +92,7 @@ class TransparentProxyProvider: NETransparentProxyProvider {
 
     override func handleNewFlow(_ flow: NEAppProxyFlow) -> Bool {
         // Only TCP for now. UDP stays with the system.
-        guard let tcp = flow as? NEAppProxyTCPFlow, let address = address, let watch = watch else {
+        guard let tcp = flow as? NEAppProxyTCPFlow, let path = path, let watch = watch else {
             return false
         }
         // While Hotline does not answer, every call goes out as usual instead of failing.
@@ -107,7 +107,7 @@ class TransparentProxyProvider: NETransparentProxyProvider {
         else { return false }
 
         Task {
-            let connection = Self.connection(to: address)
+            let connection = Self.connection(to: path)
             do {
                 try await tcp.open(withLocalEndpoint: nil)
                 try await connection.establish()

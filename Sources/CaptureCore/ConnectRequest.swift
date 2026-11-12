@@ -1,13 +1,14 @@
 import Foundation
 
-/// The request the extension sends to Hotline's proxy port for one captured
+/// The request the extension sends to Hotline's socket file for one captured
 /// connection: a standard HTTP CONNECT to where the app really called, with
 /// a standard User-Agent that names this app and its version, and three headers
 /// of ours that say it was captured and which program made it.
 /// The contract is in docs/protocol.md.
 public struct ConnectRequest: Equatable {
-    /// The version in the Hotline-Capture header. Raise it when the headers change.
-    public static let captureVersion = 1
+    /// The version in the Hotline-Capture header. Raise it when the headers, or
+    /// the way they reach Hotline, change. Version 2 goes over the socket file.
+    public static let captureVersion = 2
     /// Longer program paths are left out rather than cut, so a record never
     /// names a wrong program. Hotline has the same limit.
     public static let maxProgramLength = 4096
